@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import argparse
-from inventory_ai import analyze_image
+from inventory_ai import analyze_image, load_categories
 import shutil
 
 def main():
@@ -27,13 +27,12 @@ def main():
 
     data = []
     
-    # Create a backup/output directory to avoid messing up original files immediately if something goes wrong?
-    # Or just rename in place as requested. User requested: "renomer chaque photo en fonction de sa position dans le csv"
-    # Let's process first, then rename to be safe.
+    # Preload categories once to pass to analyze_image
+    categories_context = load_categories()
 
     for index, filename in enumerate(images, start=1):
         original_path = os.path.join(folder_path, filename)
-        new_filename = f"{index}.jpg" # Standardize to jpg or keep original extension? User said "3.jpg"
+        # Standardize to jpg or keep original extension? User said "3.jpg"
         # Let's keep original extension for safety or convert? 
         # User example: "3.jpg". Let's assume we rename to {index}.{ext}
         ext = os.path.splitext(filename)[1]
@@ -43,7 +42,7 @@ def main():
         print(f"Processing [{index}/{len(images)}]: {filename}...")
         
         # Analyze image
-        result = analyze_image(original_path)
+        result = analyze_image(original_path, categories_context=categories_context)
         
         # Add to data list
         row = {
@@ -52,6 +51,7 @@ def main():
             "Nouveau Fichier": new_filename,
             "Nom": result.get("nom", "Inconnu"),
             "Categorie": result.get("categorie", "Inconnu"),
+            "Categorie ID": result.get("categorie_id", "Inconnu"),
             "Quantite": result.get("quantite", 0)
         }
         data.append(row)

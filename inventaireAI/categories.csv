@@ -1,0 +1,93 @@
+id,nom
+categ_cafetiere,Electroménager - Cuisine - Cafetières
+categ_microondes,Electroménager - Cuisine - Micro-ondes
+categ_fours,Electroménager - Cuisine - Fours
+categ_robotcui,Electroménager - Cuisine - Robots de cuisine
+categ_grillepain,Electroménager - Cuisine - Grille pain
+categ_autres_cui,Electroménager - Cuisine - Autres
+categ_tv,Electroménager - Multimédia - TV
+categ_dvd,Electroménager - Multimédia - Lecteurs DVD
+categ_homecinema,Electroménager - Multimédia - Home Cinéma
+categ_hifi,Electroménager - Multimédia - Hi-Fi
+categ_enceintes,Electroménager - Multimédia - Enceintes
+categ_photo,Electroménager - Multimédia - Appareils Photo
+categ_tel,Electroménager - Multimédia - Téléphones
+categ_autres_multi,Electroménager - Multimédia - Autres
+categ_aspirateur,Electroménager - Entretient - Aspirateurs
+categ_fer,Electroménager - Entretient - Fers à repasser
+categ_stationrep,Electroménager - Entretient - Station de repassage
+categ_sechecheveux,Electroménager - Entretient - Seche-cheveux
+categ_autres_ent,Electroménager - Entretient - Autres
+categ_ventilateur,Electroménager - Confort - Ventilateurs
+categ_deshum,Electroménager - Confort - Déshumidificateurs
+categ_purif,Electroménager - Confort - Purificateurs d'aire
+categ_chauff,Electroménager - Confort - Chauffage d'appoint
+categ_autres_conf,Electroménager - Confort - Autres
+categ_autres_electro,Electroménager - Electroménager autres - Autres
+categ_grofour,Gros électroménager - Fours
+categ_lavelinge,Gros électroménager - Lave-Linge
+categ_lavvaisselle,Gros électroménager - Lave-vaisselle
+categ_sechelinge,Gros électroménager - Sèche-linge
+categ_frigo,Gros électroménager - Réfrigérateurs
+categ_congel,Gros électroménager - Congélateurs
+categ_autres_groselec,Gros électroménager - Autres
+categ_assiettes,Cuisine - Assiettes
+categ_casserole,Cuisine - Casseroles et poêles
+categ_couverts,Cuisine - Couverts
+categ_tasses,Cuisine - Tasses et bols
+categ_verres,Cuisine - Verres et Carafes
+categ_plats,Cuisine - Plats
+categ_autres_cuisine,Cuisine - Autres
+categ_commodes,Meuble - Commodes
+categ_armoires,Meuble - Armoires
+categ_meubles_tv,Meuble - Meubles TV
+categ_lits,Meuble - Sommiers et Lits
+categ_canapes,Meuble - Canapés et Fauteuils
+categ_vitrines,Meuble - Vitrines
+categ_chaises,Meuble - Chaises
+categ_tables,Meuble - Tables
+categ_tables_basse,Meuble - Tables basse
+categ_etageres,Meuble - Etagères
+categ_bureaux,Meuble - Bureaux
+categ_autres_meuble,Meuble - Autres
+categ_pcfixe,Informatique - Ordinateurs fixe
+categ_pcport,Informatique - Ordinateurs portable
+categ_peripheriques,Informatique - Périfériques
+categ_ecrans,Informatique - Ecrans
+categ_accessoires,Informatique - Accessoires
+categ_imprimantes,Informatique - Imprimantes
+categ_autres_info,Informatique - Autres
+categ_bibelots,Décoration - Bibelots
+categ_lampes,Décoration - Lampes
+categ_miroirs,Décoration - Miroirs
+categ_tableaux,Décoration - Tableaux
+categ_tapis,Décoration - Tapis
+categ_autres_deco,Décoration - Autres
+categ_livres,Culture - Livres
+categ_dvd_culture,Culture - DVD
+categ_cd,Culture - CD
+categ_instr,Culture - Instruments
+categ_vinyles,Culture - Vinyles
+categ_autres_culture,Culture - Autres
+categ_jardinage,Outils - Jardinage
+categ_bricolage,Outils - Bricolage
+categ_autres_outils,Outils - Autres
+categ_pieces,Outils - Pièces détachées
+categ_papeterie,Outils - Papeteries
+categ_autres_outils2,Outils - Autres divers
+categ_jouets,Jeux - Jouets enfant
+categ_societe,Jeux - Jeux de société
+categ_jeuxvideo,Jeux - Jeux vidéo
+categ_console,Jeux - Console de jeu
+categ_access_jeux,Jeux - Accessoires
+categ_autres_jeux,Jeux - Autres
+categ_litsbebe,Bébé - Lits
+categ_parcs,Bébé - Parcs
+categ_poussettes,Bébé - Poussettes
+categ_tableslang,Bébé - Tables à langer
+categ_autres_bebe,Bébé - Autres
+categ_velos,Sport - Vélos
+categ_sportequipe,Sport - Sport d'équipe
+categ_sportindiv,Sport - Sport individuel
+categ_muscu,Sport - Musculation
+categ_autres_sport,Sport - Autres
