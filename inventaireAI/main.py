@@ -3,6 +3,24 @@ import pandas as pd
 import argparse
 from inventory_ai import analyze_image, load_categories
 import shutil
+import base64
+import io
+from PIL import Image
+
+def resize_and_convert_to_base64(image_path, max_size=(300, 300)):
+    try:
+        with Image.open(image_path) as img:
+            img.thumbnail(max_size)
+            # Convert to RGB if necessary (e.g. for PNG with transparency to JPEG)
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            buffered = io.BytesIO()
+            img.save(buffered, format="JPEG", quality=70) # JPEG for size efficiency
+            return base64.b64encode(buffered.getvalue()).decode('utf-8')
+    except Exception as e:
+        print(f"Error converting image to base64: {e}")
+        return ""
 
 def main():
     parser = argparse.ArgumentParser(description="Automate inventory from images.")
@@ -44,11 +62,14 @@ def main():
         # Analyze image
         result = analyze_image(original_path, categories_context=categories_context)
         
+        # Convert image to base64
+        image_base64 = resize_and_convert_to_base64(original_path)
+
         # Add to data list
         row = {
             "ID": index,
             "Fichier Original": filename,
-            "Nouveau Fichier": new_filename,
+            "Image": image_base64,
             "Nom": result.get("nom", "Inconnu"),
             "Categorie": result.get("categorie", "Inconnu"),
             "Categorie ID": result.get("categorie_id", "Inconnu"),
