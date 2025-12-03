@@ -6,6 +6,7 @@ import shutil
 import base64
 import io
 import re
+import zipfile
 from PIL import Image
 
 def sanitize_filename(name):
@@ -40,10 +41,67 @@ def resize_and_convert_to_base64(image_path, max_size=(300, 300)):
 
 def main():
     parser = argparse.ArgumentParser(description="Automate inventory from images.")
-    parser.add_argument("folder", help="Path to the folder containing images")
+    parser.add_argument("folder", help="Path to the folder containing images or a zip file")
     args = parser.parse_args()
 
     folder_path = args.folder
+
+    # Check for zip file
+    if os.path.isfile(folder_path) and folder_path.lower().endswith('.zip'):
+        print(f"Zip file detected: {folder_path}")
+        extract_path = os.path.splitext(folder_path)[0]
+
+        try:
+            with zipfile.ZipFile(folder_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_path)
+            print(f"Extracted to: {extract_path}")
+            folder_path = extract_path
+
+            # Check for single nested folder (often created when zipping a folder)
+            # or recursively find the first folder with images if the root is empty of images
+
+            # Helper to check if a folder has images
+            valid_extensions = ('.jpg', '.jpeg', '.png', '.webp')
+            def has_images(path):
+                return any(f.lower().endswith(valid_extensions) for f in os.listdir(path))
+
+            if not has_images(folder_path):
+                # If root has no images, look for a nested folder
+                items = os.listdir(folder_path)
+
+                # Case 1: Single directory inside zip
+                if len(items) == 1:
+                     potential_subdir = os.path.join(folder_path, items[0])
+                     if os.path.isdir(potential_subdir):
+                         print(f"Adjusting folder path to nested directory: {potential_subdir}")
+                         folder_path = potential_subdir
+
+                # Case 2: If still no images, maybe we should walk to find the first folder with images?
+                # This is useful if the zip structure is like:
+                # zip_root/
+                #   __MACOSX/
+                #   actual_folder/
+                #      images...
+
+                if not has_images(folder_path):
+                     print("No images at root. Searching for images in subdirectories...")
+                     found = False
+                     for root, dirs, files in os.walk(folder_path):
+                         if any(f.lower().endswith(valid_extensions) for f in files):
+                             print(f"Found images in: {root}")
+                             folder_path = root
+                             found = True
+                             break
+                     if not found:
+                         print("Warning: No images found in the zip archive.")
+
+        except zipfile.BadZipFile:
+            print("Error: The file is not a valid zip file.")
+            return
+        except Exception as e:
+            print(f"Error extracting zip file: {e}")
+            return
+
     if not os.path.isdir(folder_path):
         print(f"Error: Directory '{folder_path}' not found.")
         return
