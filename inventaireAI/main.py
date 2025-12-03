@@ -39,6 +39,75 @@ def resize_and_convert_to_base64(image_path, max_size=(300, 300)):
         print(f"Error converting image to base64: {e}")
         return ""
 
+def compress_image_to_target(source_path, dest_path, max_size_kb=250):
+    """
+    Compresses an image to be under max_size_kb.
+    If already smaller, copies/renames it if needed.
+    """
+    target_size_bytes = max_size_kb * 1024
+
+    # If source exists and is already small enough
+    if os.path.exists(source_path) and os.path.getsize(source_path) <= target_size_bytes:
+        if source_path != dest_path:
+            shutil.move(source_path, dest_path)
+        return
+
+    # If too big, compress
+    quality = 85
+    steps = 10
+    min_quality = 20
+
+    try:
+        with Image.open(source_path) as img:
+            # Start by resizing if huge (e.g. > 4MP)
+            if img.width > 2000 or img.height > 2000:
+                 img.thumbnail((2000, 2000))
+
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            # Loop to reduce quality
+            saved = False
+            while quality >= min_quality:
+                buffer = io.BytesIO()
+                img.save(buffer, format="JPEG", quality=quality, optimize=True)
+                size = buffer.tell()
+
+                if size <= target_size_bytes:
+                    with open(dest_path, "wb") as f:
+                        f.write(buffer.getvalue())
+                    saved = True
+                    break
+
+                quality -= steps
+
+            if not saved:
+                # If still too big after quality reduction, resize aggressively
+                ratio = 0.8
+                while True:
+                    new_size = (int(img.width * ratio), int(img.height * ratio))
+                    resized = img.resize(new_size, Image.Resampling.LANCZOS)
+
+                    buffer = io.BytesIO()
+                    resized.save(buffer, format="JPEG", quality=min_quality, optimize=True)
+                    size = buffer.tell()
+
+                    if size <= target_size_bytes or new_size[0] < 300:
+                        with open(dest_path, "wb") as f:
+                            f.write(buffer.getvalue())
+                        break
+                    ratio *= 0.8
+
+        # If we successfully compressed to dest_path, remove source if different
+        if source_path != dest_path and os.path.exists(dest_path):
+             os.remove(source_path)
+
+    except Exception as e:
+        print(f"Error compressing {source_path}: {e}")
+        # Fallback: just move if possible
+        if source_path != dest_path and os.path.exists(source_path):
+            shutil.move(source_path, dest_path)
+
 def main():
     parser = argparse.ArgumentParser(description="Automate inventory from images.")
     parser.add_argument("folder", help="Path to the folder containing images or a zip file")
@@ -163,13 +232,15 @@ def main():
         }
         data.append(row)
 
-        # Rename file
-        if original_path != new_path:
-            try:
-                os.rename(original_path, new_path)
-                print(f"  Renamed to: {new_filename}")
-            except OSError as e:
-                print(f"  Warning: Could not rename {filename} to {new_filename}: {e}")
+        # Rename and compress file if needed
+        try:
+            compress_image_to_target(original_path, new_path, max_size_kb=250)
+            if original_path != new_path:
+                print(f"  Processed and renamed to: {new_filename}")
+            else:
+                 print(f"  Processed file: {new_filename}")
+        except Exception as e:
+            print(f"  Warning: Could not process {filename} to {new_filename}: {e}")
         
     # Create DataFrame and save to CSV
     df = pd.DataFrame(data)
