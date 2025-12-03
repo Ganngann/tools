@@ -5,7 +5,23 @@ from inventory_ai import analyze_image, load_categories
 import shutil
 import base64
 import io
+import re
 from PIL import Image
+
+def sanitize_filename(name):
+    # Remove invalid characters for Windows/Linux filenames
+    name = re.sub(r'[<>:"/\\|?*]', '', name)
+    name = name.strip()
+    return name
+
+def get_unique_filepath(folder, filename):
+    base, ext = os.path.splitext(filename)
+    counter = 1
+    new_filename = filename
+    while os.path.exists(os.path.join(folder, new_filename)):
+        new_filename = f"{base}_{counter}{ext}"
+        counter += 1
+    return os.path.join(folder, new_filename)
 
 def resize_and_convert_to_base64(image_path, max_size=(300, 300)):
     try:
@@ -50,27 +66,37 @@ def main():
 
     for index, filename in enumerate(images, start=1):
         original_path = os.path.join(folder_path, filename)
-        # Standardize to jpg or keep original extension? User said "3.jpg"
-        # Let's keep original extension for safety or convert? 
-        # User example: "3.jpg". Let's assume we rename to {index}.{ext}
-        ext = os.path.splitext(filename)[1]
-        new_filename = f"{index}{ext}"
-        new_path = os.path.join(folder_path, new_filename)
 
         print(f"Processing [{index}/{len(images)}]: {filename}...")
         
         # Analyze image
         result = analyze_image(original_path, categories_context=categories_context)
         
+        # Determine new filename based on object name
+        nom_objet = result.get("nom", "Inconnu")
+        sanitized_name = sanitize_filename(nom_objet)
+        if not sanitized_name:
+            sanitized_name = f"Item_{index}"
+
+        ext = os.path.splitext(filename)[1]
+        proposed_filename = f"{sanitized_name}{ext}"
+
+        if proposed_filename != filename:
+            new_path = get_unique_filepath(folder_path, proposed_filename)
+            new_filename = os.path.basename(new_path)
+        else:
+            new_path = original_path
+            new_filename = filename
+
         # Convert image to base64
         image_base64 = resize_and_convert_to_base64(original_path)
 
         # Add to data list
         row = {
             "ID": index,
-            "Fichier Original": filename,
+            "Fichier Original": new_filename,
             "Image": image_base64,
-            "Nom": result.get("nom", "Inconnu"),
+            "Nom": nom_objet,
             "Categorie": result.get("categorie", "Inconnu"),
             "Categorie ID": result.get("categorie_id", "Inconnu"),
             "Quantite": result.get("quantite", 0)
@@ -78,10 +104,10 @@ def main():
         data.append(row)
 
         # Rename file
-        # Handle case where file already exists (e.g. running script twice)
         if original_path != new_path:
             try:
                 os.rename(original_path, new_path)
+                print(f"  Renamed to: {new_filename}")
             except OSError as e:
                 print(f"  Warning: Could not rename {filename} to {new_filename}: {e}")
         
