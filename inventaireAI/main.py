@@ -74,12 +74,14 @@ def main():
         
         # Determine new filename based on object name
         nom_objet = result.get("nom", "Inconnu")
+        quantite = result.get("quantite", 0)
+
         sanitized_name = sanitize_filename(nom_objet)
         if not sanitized_name:
             sanitized_name = f"Item_{index}"
 
         ext = os.path.splitext(filename)[1]
-        proposed_filename = f"{sanitized_name}{ext}"
+        proposed_filename = f"{quantite}_{sanitized_name}{ext}"
 
         if proposed_filename != filename:
             new_path = get_unique_filepath(folder_path, proposed_filename)
