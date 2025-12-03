@@ -3,6 +3,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 import json
+import io
 
 load_dotenv()
 
@@ -49,8 +50,24 @@ def analyze_image(image_path, categories_context=None):
             # Force load image data so we can close the file
             img.load()
 
-            # Resize image to max 1000x1000 before sending to API
-            img.thumbnail((1000, 1000))
+            # Resize image to max 800x800 for API efficiency (lightest possible)
+            img.thumbnail((800, 800))
+
+            # Convert to compressed JPEG bytes to minimize upload size
+            img_byte_arr = io.BytesIO()
+            # Convert RGBA/P to RGB for JPEG compatibility
+            if img.mode in ("RGBA", "P"):
+                 img = img.convert("RGB")
+
+            # Compress aggressively (quality=60)
+            img.save(img_byte_arr, format='JPEG', quality=60, optimize=True)
+            img_byte_arr.seek(0)
+
+            # Create a blob for the API
+            image_blob = {
+                'mime_type': 'image/jpeg',
+                'data': img_byte_arr.getvalue()
+            }
             
             prompt = f"""
             Analyze this image for an inventory system.
@@ -76,7 +93,7 @@ def analyze_image(image_path, categories_context=None):
             }}
             """
             
-            response = model.generate_content([prompt, img])
+            response = model.generate_content([prompt, image_blob])
         
         # Clean up response text to ensure it's valid JSON
         text = response.text.strip()
