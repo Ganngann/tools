@@ -48,6 +48,9 @@ def analyze_image(image_path, categories_context=None):
         with Image.open(image_path) as img:
             # Force load image data so we can close the file
             img.load()
+
+            # Resize image to max 1000x1000 before sending to API
+            img.thumbnail((1000, 1000))
             
             prompt = f"""
             Analyze this image for an inventory system.
