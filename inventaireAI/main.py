@@ -1,4 +1,5 @@
 import os
+import datetime
 import pandas as pd
 import argparse
 from inventory_ai import analyze_image, load_categories
@@ -119,6 +120,16 @@ def main():
     if os.path.isfile(folder_path) and folder_path.lower().endswith('.zip'):
         print(f"Zip file detected: {folder_path}")
         extract_path = os.path.splitext(folder_path)[0]
+
+        if os.path.exists(extract_path):
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = f"{extract_path}_backup_{timestamp}"
+            try:
+                os.rename(extract_path, backup_path)
+                print(f"Existing folder found. Backed up to: {backup_path}")
+            except OSError as e:
+                print(f"Error backing up existing folder: {e}")
+                return
 
         try:
             with zipfile.ZipFile(folder_path, 'r') as zip_ref:
