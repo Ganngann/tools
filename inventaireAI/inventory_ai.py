@@ -51,7 +51,9 @@ def analyze_image(image_path, categories_context=None):
             img.load()
 
             # Resize image to max 800x800 for API efficiency (lightest possible)
-            img.thumbnail((800, 800))
+            max_width = int(os.getenv("GEMINI_MAX_WIDTH", 800))
+            max_height = int(os.getenv("GEMINI_MAX_HEIGHT", 800))
+            img.thumbnail((max_width, max_height))
 
             # Convert to compressed JPEG bytes to minimize upload size
             img_byte_arr = io.BytesIO()
@@ -60,7 +62,8 @@ def analyze_image(image_path, categories_context=None):
                  img = img.convert("RGB")
 
             # Compress aggressively (quality=60)
-            img.save(img_byte_arr, format='JPEG', quality=60, optimize=True)
+            quality = int(os.getenv("GEMINI_JPEG_QUALITY", 60))
+            img.save(img_byte_arr, format='JPEG', quality=quality, optimize=True)
             img_byte_arr.seek(0)
 
             # Create a blob for the API

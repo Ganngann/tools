@@ -9,6 +9,20 @@ import io
 import re
 import zipfile
 from PIL import Image
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Load configuration from environment variables
+THUMBNAIL_MAX_WIDTH = int(os.getenv("THUMBNAIL_MAX_WIDTH", 300))
+THUMBNAIL_MAX_HEIGHT = int(os.getenv("THUMBNAIL_MAX_HEIGHT", 300))
+THUMBNAIL_JPEG_QUALITY = int(os.getenv("THUMBNAIL_JPEG_QUALITY", 70))
+
+COMPRESSION_MAX_SIZE_KB = int(os.getenv("COMPRESSION_MAX_SIZE_KB", 250))
+COMPRESSION_INITIAL_MAX_DIM = int(os.getenv("COMPRESSION_INITIAL_MAX_DIM", 2000))
+COMPRESSION_START_QUALITY = int(os.getenv("COMPRESSION_START_QUALITY", 85))
+COMPRESSION_QUALITY_STEP = int(os.getenv("COMPRESSION_QUALITY_STEP", 10))
+COMPRESSION_MIN_QUALITY = int(os.getenv("COMPRESSION_MIN_QUALITY", 20))
 
 def sanitize_filename(name):
     # Remove invalid characters for Windows/Linux filenames
@@ -25,7 +39,10 @@ def get_unique_filepath(folder, filename):
         counter += 1
     return os.path.join(folder, new_filename)
 
-def resize_and_convert_to_base64(image_path, max_size=(300, 300)):
+def resize_and_convert_to_base64(image_path, max_size=None):
+    if max_size is None:
+        max_size = (THUMBNAIL_MAX_WIDTH, THUMBNAIL_MAX_HEIGHT)
+
     try:
         with Image.open(image_path) as img:
             img.thumbnail(max_size)
@@ -34,17 +51,20 @@ def resize_and_convert_to_base64(image_path, max_size=(300, 300)):
                 img = img.convert("RGB")
 
             buffered = io.BytesIO()
-            img.save(buffered, format="JPEG", quality=70) # JPEG for size efficiency
+            img.save(buffered, format="JPEG", quality=THUMBNAIL_JPEG_QUALITY) # JPEG for size efficiency
             return base64.b64encode(buffered.getvalue()).decode('utf-8')
     except Exception as e:
         print(f"Error converting image to base64: {e}")
         return ""
 
-def compress_image_to_target(source_path, dest_path, max_size_kb=250):
+def compress_image_to_target(source_path, dest_path, max_size_kb=None):
     """
     Compresses an image to be under max_size_kb.
     If already smaller, copies/renames it if needed.
     """
+    if max_size_kb is None:
+        max_size_kb = COMPRESSION_MAX_SIZE_KB
+
     target_size_bytes = max_size_kb * 1024
 
     # If source exists and is already small enough
@@ -54,15 +74,15 @@ def compress_image_to_target(source_path, dest_path, max_size_kb=250):
         return
 
     # If too big, compress
-    quality = 85
-    steps = 10
-    min_quality = 20
+    quality = COMPRESSION_START_QUALITY
+    steps = COMPRESSION_QUALITY_STEP
+    min_quality = COMPRESSION_MIN_QUALITY
 
     try:
         with Image.open(source_path) as img:
             # Start by resizing if huge (e.g. > 4MP)
-            if img.width > 2000 or img.height > 2000:
-                 img.thumbnail((2000, 2000))
+            if img.width > COMPRESSION_INITIAL_MAX_DIM or img.height > COMPRESSION_INITIAL_MAX_DIM:
+                 img.thumbnail((COMPRESSION_INITIAL_MAX_DIM, COMPRESSION_INITIAL_MAX_DIM))
 
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
@@ -245,7 +265,7 @@ def main():
 
         # Rename and compress file if needed
         try:
-            compress_image_to_target(original_path, new_path, max_size_kb=250)
+            compress_image_to_target(original_path, new_path)
             if original_path != new_path:
                 print(f"  Processed and renamed to: {new_filename}")
             else:
