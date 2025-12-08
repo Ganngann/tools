@@ -252,6 +252,20 @@ def main():
         image_base64 = resize_and_convert_to_base64(original_path)
 
         # Add to data list
+        prix_unitaire = result.get("prix_unitaire_estime", 0)
+        try:
+            prix_unitaire = float(prix_unitaire)
+        except (ValueError, TypeError):
+            prix_unitaire = 0.0
+
+        quantite_val = result.get("quantite", 0)
+        try:
+            quantite_val = int(quantite_val)
+        except (ValueError, TypeError):
+            quantite_val = 0
+
+        prix_total = prix_unitaire * quantite_val
+
         row = {
             "ID": index,
             "Fichier Original": new_filename,
@@ -259,7 +273,10 @@ def main():
             "Nom": nom_objet,
             "Categorie": result.get("categorie", "Inconnu"),
             "Categorie ID": result.get("categorie_id", "Inconnu"),
-            "Quantite": result.get("quantite", 0)
+            "Quantite": quantite_val,
+            "Etat": result.get("etat", "Inconnu"),
+            "Prix Unitaire": prix_unitaire,
+            "Prix Total": prix_total
         }
         data.append(row)
 
