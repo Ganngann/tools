@@ -125,7 +125,7 @@ def analyze_image(image_path, categories_context=None):
             "prix_neuf_estime": 0
         }
 
-def analyze_image_multiple(image_path, target_element=None, categories_context=None):
+def analyze_image_multiple(image_path, target_element=None, categories_context=None, high_quality=False):
     """
     Analyzes an image using Gemini to extract a list of objects (Name, Category, Quantity, etc.).
     Returns a list of dictionaries.
@@ -143,21 +143,60 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             # Force load image data so we can close the file
             img.load()
 
-            # Resize image to max 800x800 for API efficiency (lightest possible)
-            max_width = int(os.getenv("GEMINI_MAX_WIDTH", 800))
-            max_height = int(os.getenv("GEMINI_MAX_HEIGHT", 800))
-            img.thumbnail((max_width, max_height))
-
-            # Convert to compressed JPEG bytes to minimize upload size
             img_byte_arr = io.BytesIO()
-            # Convert RGBA/P to RGB for JPEG compatibility
-            if img.mode in ("RGBA", "P"):
-                 img = img.convert("RGB")
 
-            # Compress aggressively (quality=60)
-            quality = int(os.getenv("GEMINI_JPEG_QUALITY", 60))
-            img.save(img_byte_arr, format='JPEG', quality=quality, optimize=True)
-            img_byte_arr.seek(0)
+            if high_quality:
+                # High quality mode: Try to use original resolution, but keep under 10MB
+                # User constraint: "taille maximale de 10Mo", "original format", "barely compressed"
+
+                # Convert RGBA/P to RGB for JPEG compatibility if needed
+                if img.mode in ("RGBA", "P"):
+                     img = img.convert("RGB")
+
+                # Initial attempt: save with high quality (e.g., 95)
+                quality = 95
+                img.save(img_byte_arr, format='JPEG', quality=quality, optimize=True)
+
+                # Check size (10MB = 10 * 1024 * 1024 bytes)
+                max_size_bytes = 10 * 1024 * 1024
+
+                # Iterative compression if too large
+                while img_byte_arr.tell() > max_size_bytes and quality > 10:
+                    quality -= 5
+                    img_byte_arr = io.BytesIO()
+                    img.save(img_byte_arr, format='JPEG', quality=quality, optimize=True)
+
+                # If still too large after lowering quality, resize iteratively
+                if img_byte_arr.tell() > max_size_bytes:
+                    width, height = img.size
+                    ratio = 0.9
+                    while img_byte_arr.tell() > max_size_bytes and width > 300:
+                        width = int(width * ratio)
+                        height = int(height * ratio)
+                        resized_img = img.resize((width, height), Image.Resampling.LANCZOS)
+
+                        img_byte_arr = io.BytesIO()
+                        # Reset quality to something reasonable for resized
+                        quality = 85
+                        resized_img.save(img_byte_arr, format='JPEG', quality=quality, optimize=True)
+                        ratio *= 0.9
+
+                img_byte_arr.seek(0)
+
+            else:
+                # Standard mode: Resize to max 800x800 for API efficiency
+                max_width = int(os.getenv("GEMINI_MAX_WIDTH", 800))
+                max_height = int(os.getenv("GEMINI_MAX_HEIGHT", 800))
+                img.thumbnail((max_width, max_height))
+
+                # Convert RGBA/P to RGB for JPEG compatibility
+                if img.mode in ("RGBA", "P"):
+                     img = img.convert("RGB")
+
+                # Compress aggressively (quality=60)
+                quality = int(os.getenv("GEMINI_JPEG_QUALITY", 60))
+                img.save(img_byte_arr, format='JPEG', quality=quality, optimize=True)
+                img_byte_arr.seek(0)
 
             # Create a blob for the API
             image_blob = {

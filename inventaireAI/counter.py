@@ -123,17 +123,31 @@ def compress_image_to_target(source_path, dest_path, max_size_kb=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Automate inventory counting from images.")
-    parser.add_argument("folder", help="Path to the folder containing images or a zip file")
+    parser.add_argument("folder", help="Path to the folder containing images, a zip file, or a single image file")
     parser.add_argument("--target", "-t", help="Optional: Description of specific elements to count (e.g., 'vis', 'voitures rouges').")
     args = parser.parse_args()
 
-    folder_path = args.folder
+    input_path = args.folder
     target_element = args.target
+    valid_extensions = ('.jpg', '.jpeg', '.png', '.webp')
 
-    # Check for zip file
-    if os.path.isfile(folder_path) and folder_path.lower().endswith('.zip'):
-        print(f"Zip file detected: {folder_path}")
-        extract_path = os.path.splitext(folder_path)[0]
+    # Determine mode: Folder, Zip, or Single File
+    mode = "folder"
+    folder_path = input_path
+    single_file_name = None
+
+    if os.path.isfile(input_path):
+        if input_path.lower().endswith('.zip'):
+            mode = "zip"
+        elif input_path.lower().endswith(valid_extensions):
+            mode = "single_file"
+        else:
+            print(f"Error: File '{input_path}' is not a directory, a zip file, or a supported image.")
+            return
+
+    if mode == "zip":
+        print(f"Zip file detected: {input_path}")
+        extract_path = os.path.splitext(input_path)[0]
 
         if os.path.exists(extract_path):
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -146,13 +160,12 @@ def main():
                 return
 
         try:
-            with zipfile.ZipFile(folder_path, 'r') as zip_ref:
+            with zipfile.ZipFile(input_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_path)
             print(f"Extracted to: {extract_path}")
             folder_path = extract_path
 
             # Check for single nested folder (often created when zipping a folder)
-            valid_extensions = ('.jpg', '.jpeg', '.png', '.webp')
             def has_images(path):
                 return any(f.lower().endswith(valid_extensions) for f in os.listdir(path))
 
@@ -183,17 +196,22 @@ def main():
             print(f"Error extracting zip file: {e}")
             return
 
-    if not os.path.isdir(folder_path):
-        print(f"Error: Directory '{folder_path}' not found.")
-        return
+    if mode == "single_file":
+        folder_path = os.path.dirname(os.path.abspath(input_path))
+        single_file_name = os.path.basename(input_path)
+        images = [single_file_name]
+    else:
+        # Folder mode (or extracted zip)
+        if not os.path.isdir(folder_path):
+            print(f"Error: Directory '{folder_path}' not found.")
+            return
 
-    # Get list of image files
-    valid_extensions = ('.jpg', '.jpeg', '.png', '.webp')
-    images = [f for f in os.listdir(folder_path) if f.lower().endswith(valid_extensions)]
-    images.sort()
+        # Get list of image files
+        images = [f for f in os.listdir(folder_path) if f.lower().endswith(valid_extensions)]
+        images.sort()
 
     if not images:
-        print("No images found in the specified directory.")
+        print("No images found to process.")
         return
 
     print(f"Found {len(images)} images. Starting processing...")
@@ -212,8 +230,8 @@ def main():
 
         print(f"Processing [{index}/{len(images)}]: {filename}...")
 
-        # Analyze image
-        results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context)
+        # Analyze image (high_quality=True for counting/detail)
+        results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True)
 
         if not isinstance(results, list):
             results = [results] # Handle error case returning dict
