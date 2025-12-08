@@ -24,6 +24,9 @@ COMPRESSION_START_QUALITY = int(os.getenv("COMPRESSION_START_QUALITY", 85))
 COMPRESSION_QUALITY_STEP = int(os.getenv("COMPRESSION_QUALITY_STEP", 10))
 COMPRESSION_MIN_QUALITY = int(os.getenv("COMPRESSION_MIN_QUALITY", 20))
 
+CSV_SEPARATOR = os.getenv("CSV_SEPARATOR", ",")
+INCLUDE_IMAGE_BASE64 = os.getenv("INCLUDE_IMAGE_BASE64", "True").lower() in ('true', '1', 't')
+
 ADDITIONAL_CSV_COLUMNS = os.getenv("ADDITIONAL_CSV_COLUMNS", "")
 
 def sanitize_filename(name):
@@ -251,7 +254,9 @@ def main():
             new_filename = filename
 
         # Convert image to base64
-        image_base64 = resize_and_convert_to_base64(original_path)
+        image_base64 = ""
+        if INCLUDE_IMAGE_BASE64:
+            image_base64 = resize_and_convert_to_base64(original_path)
 
         # Add to data list
         prix_unitaire = result.get("prix_unitaire_estime", 0)
@@ -277,7 +282,6 @@ def main():
         row = {
             "ID": index,
             "Fichier Original": new_filename,
-            "Image": image_base64,
             "Nom": nom_objet,
             "Categorie": result.get("categorie", "Inconnu"),
             "Categorie ID": result.get("categorie_id", "Inconnu"),
@@ -287,6 +291,8 @@ def main():
             "Prix Neuf Estime": prix_neuf,
             "Prix Total": prix_total
         }
+        if INCLUDE_IMAGE_BASE64:
+            row["Image"] = image_base64
         data.append(row)
 
         # Rename and compress file if needed
@@ -335,7 +341,7 @@ def main():
     
     # Actually, if I rename files inside the loop, and the loop iterates over `images` list which is pre-fetched, it should be fine.
     
-    df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+    df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
     print(f"\nDone! Inventory saved to {csv_path}")
 
 if __name__ == "__main__":
