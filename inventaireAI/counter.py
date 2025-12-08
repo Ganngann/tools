@@ -35,6 +35,15 @@ def sanitize_filename(name):
     name = name.strip()
     return name
 
+def get_unique_filepath(folder, filename):
+    base, ext = os.path.splitext(filename)
+    counter = 1
+    new_filename = filename
+    while os.path.exists(os.path.join(folder, new_filename)):
+        new_filename = f"{base}_{counter}{ext}"
+        counter += 1
+    return os.path.join(folder, new_filename)
+
 def resize_and_convert_to_base64(image_path, max_size=None):
     if max_size is None:
         max_size = (THUMBNAIL_MAX_WIDTH, THUMBNAIL_MAX_HEIGHT)
@@ -241,26 +250,65 @@ def main():
         if INCLUDE_IMAGE_BASE64:
             image_base64 = resize_and_convert_to_base64(original_path)
 
-        # Compress image in place (or skip renaming)
-        # Since we have multiple items, we don't rename the file to an item name.
-        # We just ensure it's compressed if needed.
-        # We can overwrite the original file with the compressed version if allowed?
-        # The previous script renamed and deleted original. Here we'll just compress to a temp and overwrite if successful.
-        # Or just use the original filename.
+        # Determine if we should rename based on target
+        if target_element:
+            # Calculate total quantity for naming
+            total_quantity = 0
+            for item in results:
+                try:
+                    total_quantity += int(item.get("quantite", 0))
+                except (ValueError, TypeError):
+                    pass
 
-        # Let's compress to a temp file then move back to original filename to ensure optimization
-        temp_path = os.path.join(folder_path, f"temp_{filename}")
-        try:
-            compress_image_to_target(original_path, temp_path)
-            # If temp exists and is different from original (it should be different path)
-            if os.path.exists(temp_path):
-                 # Replace original with compressed
-                 shutil.move(temp_path, original_path)
-                 # print(f"  Optimized image: {filename}")
-        except Exception as e:
-            print(f"  Warning: Could not optimize {filename}: {e}")
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            sanitized_target = sanitize_filename(target_element)
+            ext = os.path.splitext(filename)[1]
+            proposed_filename = f"{total_quantity}_{sanitized_target}{ext}"
+
+            # Check collision
+            if proposed_filename != filename:
+                new_path_full = get_unique_filepath(folder_path, proposed_filename)
+                new_filename = os.path.basename(new_path_full)
+            else:
+                new_path_full = original_path
+                new_filename = filename
+
+            # Compress/Rename to new name safely using a temp file first
+            temp_path = os.path.join(folder_path, f"temp_{filename}")
+            try:
+                # 1. Compress to temp file
+                compress_image_to_target(original_path, temp_path)
+
+                # 2. Move temp file to final destination (new_path_full)
+                if os.path.exists(temp_path):
+                    shutil.move(temp_path, new_path_full)
+
+                    # 3. If we renamed (new path != original), delete original if it still exists
+                    # Note: if new_path_full == original_path, we just overwrote it safely via temp, so no delete needed.
+                    if new_path_full != original_path and os.path.exists(original_path):
+                         os.remove(original_path)
+
+                    filename = new_filename # Update variable for CSV
+                    if new_path_full != original_path:
+                        print(f"  Renamed to: {filename}")
+
+            except Exception as e:
+                 print(f"  Warning: Could not rename {filename} to {new_filename}: {e}")
+                 if os.path.exists(temp_path):
+                     os.remove(temp_path)
+        else:
+            # Original behavior: compress in place (temp then move back)
+            temp_path = os.path.join(folder_path, f"temp_{filename}")
+            try:
+                compress_image_to_target(original_path, temp_path)
+                # If temp exists and is different from original (it should be different path)
+                if os.path.exists(temp_path):
+                     # Replace original with compressed
+                     shutil.move(temp_path, original_path)
+                     # print(f"  Optimized image: {filename}")
+            except Exception as e:
+                print(f"  Warning: Could not optimize {filename}: {e}")
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
 
         for item in results:
             nom_objet = item.get("nom", "Inconnu")
