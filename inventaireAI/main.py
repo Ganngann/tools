@@ -256,9 +256,15 @@ def main():
         # Add to data list
         prix_unitaire = result.get("prix_unitaire_estime", 0)
         try:
-            prix_unitaire = float(prix_unitaire)
+            prix_unitaire = int(float(prix_unitaire)) # Cast to float first in case it's a string with decimals like "2.0"
         except (ValueError, TypeError):
-            prix_unitaire = 0.0
+            prix_unitaire = 0
+
+        prix_neuf = result.get("prix_neuf_estime", 0)
+        try:
+            prix_neuf = int(float(prix_neuf))
+        except (ValueError, TypeError):
+            prix_neuf = 0
 
         quantite_val = result.get("quantite", 0)
         try:
@@ -278,6 +284,7 @@ def main():
             "Quantite": quantite_val,
             "Etat": result.get("etat", "Inconnu"),
             "Prix Unitaire": prix_unitaire,
+            "Prix Neuf Estime": prix_neuf,
             "Prix Total": prix_total
         }
         data.append(row)
