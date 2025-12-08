@@ -308,6 +308,20 @@ def main():
         for col in additional_cols:
             df[col] = ""
 
+    # Reorder columns: [Standard Cols except Nom, Etat, Quantite], Nom, Etat, Quantite, [Custom Cols]
+    cols = df.columns.tolist()
+    desired_known_order = [
+        "ID", "Fichier Original", "Image", "Categorie", "Categorie ID",
+        "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
+        "Nom", "Etat", "Quantite"
+    ]
+
+    available_known_cols = [c for c in desired_known_order if c in cols]
+    custom_cols = [c for c in cols if c not in desired_known_order]
+
+    final_order = available_known_cols + custom_cols
+    df = df[final_order]
+
     # CSV name based on folder name
     folder_name = os.path.basename(os.path.normpath(folder_path))
     csv_filename = f"{folder_name}.csv"
