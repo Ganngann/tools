@@ -87,7 +87,8 @@ def analyze_image(image_path, categories_context=None):
             - "categorie_id": The ID of the category from the provided list.
             - "quantite": The quantity read from the paper/label. If no quantity is visible, estimate it or default to 1. Return as an integer.
             - "etat": The condition of the object. Must be either "Neuf" or "Occasion".
-            - "prix_unitaire_estime": An estimated unit price in Euros based on the object type and condition. Return as a number.
+            - "prix_unitaire_estime": An estimated unit price in Euros based on the object type and condition. Return as an integer (no decimals).
+            - "prix_neuf_estime": An estimated new price in Euros if the object were bought new today. Return as an integer (no decimals).
             
             Example output format:
             {{
@@ -96,7 +97,8 @@ def analyze_image(image_path, categories_context=None):
                 "categorie_id": "categ_assiettes",
                 "quantite": 6,
                 "etat": "Occasion",
-                "prix_unitaire_estime": 2.50
+                "prix_unitaire_estime": 2,
+                "prix_neuf_estime": 5
             }}
             """
             
@@ -119,5 +121,6 @@ def analyze_image(image_path, categories_context=None):
             "categorie_id": "unknown",
             "quantite": 0,
             "etat": "Inconnu",
-            "prix_unitaire_estime": 0
+            "prix_unitaire_estime": 0,
+            "prix_neuf_estime": 0
         }
