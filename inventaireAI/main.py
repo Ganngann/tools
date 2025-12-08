@@ -24,6 +24,8 @@ COMPRESSION_START_QUALITY = int(os.getenv("COMPRESSION_START_QUALITY", 85))
 COMPRESSION_QUALITY_STEP = int(os.getenv("COMPRESSION_QUALITY_STEP", 10))
 COMPRESSION_MIN_QUALITY = int(os.getenv("COMPRESSION_MIN_QUALITY", 20))
 
+ADDITIONAL_CSV_COLUMNS = os.getenv("ADDITIONAL_CSV_COLUMNS", "")
+
 def sanitize_filename(name):
     # Remove invalid characters for Windows/Linux filenames
     name = re.sub(r'[<>:"/\\|?*]', '', name)
@@ -293,6 +295,12 @@ def main():
     # Create DataFrame and save to CSV
     df = pd.DataFrame(data)
     
+    # Add empty columns if configured
+    if ADDITIONAL_CSV_COLUMNS:
+        additional_cols = [col.strip() for col in ADDITIONAL_CSV_COLUMNS.split(',') if col.strip()]
+        for col in additional_cols:
+            df[col] = ""
+
     # CSV name based on folder name
     folder_name = os.path.basename(os.path.normpath(folder_path))
     csv_filename = f"{folder_name}.csv"
