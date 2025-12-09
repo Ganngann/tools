@@ -364,7 +364,8 @@ def main():
             "Etat": result.get("etat", "Inconnu"),
             "Prix Unitaire": prix_unitaire,
             "Prix Neuf Estime": prix_neuf,
-            "Prix Total": prix_total
+            "Prix Total": prix_total,
+            "Fiabilite": result.get("fiabilite", 0)
         }
         if INCLUDE_IMAGE_BASE64:
             row["Image"] = image_base64
@@ -394,7 +395,7 @@ def main():
     desired_known_order = [
         "ID", "Fichier Original", "Image", "Categorie", "Categorie ID",
         "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
-        "Nom", "Etat", "Quantite"
+        "Fiabilite", "Nom", "Etat", "Quantite"
     ]
 
     available_known_cols = [c for c in desired_known_order if c in cols]
