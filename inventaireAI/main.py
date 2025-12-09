@@ -360,6 +360,7 @@ def main():
             "Nom": nom_objet,
             "Categorie": result.get("categorie", "Inconnu"),
             "Categorie ID": result.get("categorie_id", "Inconnu"),
+            "Fiabilite": result.get("fiabilite", 0),
             "Quantite": quantite_val,
             "Etat": result.get("etat", "Inconnu"),
             "Prix Unitaire": prix_unitaire,
@@ -392,7 +393,7 @@ def main():
     # Reorder columns: [Standard Cols except Nom, Etat, Quantite], Nom, Etat, Quantite, [Custom Cols]
     cols = df.columns.tolist()
     desired_known_order = [
-        "ID", "Fichier Original", "Image", "Categorie", "Categorie ID",
+        "ID", "Fichier Original", "Image", "Categorie", "Categorie ID", "Fiabilite",
         "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
         "Nom", "Etat", "Quantite"
     ]
