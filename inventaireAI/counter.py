@@ -29,6 +29,11 @@ INCLUDE_IMAGE_BASE64 = os.getenv("INCLUDE_IMAGE_BASE64", "True").lower() in ('tr
 
 ADDITIONAL_CSV_COLUMNS = os.getenv("ADDITIONAL_CSV_COLUMNS", "")
 
+# Reliability Settings
+RELIABILITY_THRESHOLD = int(os.getenv("RELIABILITY_THRESHOLD", 85))
+LOW_CONFIDENCE_ACTION = os.getenv("LOW_CONFIDENCE_ACTION", "move") # 'move' or 'ask'
+MANUAL_REVIEW_FOLDER_NAME = os.getenv("MANUAL_REVIEW_FOLDER", "manual_review")
+
 def sanitize_filename(name):
     # Remove invalid characters for Windows/Linux filenames
     name = re.sub(r'[<>:"/\\|?*]', '', name)
@@ -239,11 +244,91 @@ def main():
 
         print(f"Processing [{index}/{len(images)}]: {filename}...")
 
-        # Analyze image (high_quality=True for counting/detail)
+        # Initial Analysis (high_quality=True for counting/detail)
         results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True)
 
         if not isinstance(results, list):
             results = [results] # Handle error case returning dict
+
+        # Reliability Check
+        low_confidence_items = []
+        for item in results:
+            score = item.get("fiabilite", 0)
+            try:
+                score = int(score)
+            except:
+                score = 0
+            if score < RELIABILITY_THRESHOLD:
+                low_confidence_items.append(item)
+
+        action_taken = "proceed"
+        if low_confidence_items:
+            print(f"  Warning: {len(low_confidence_items)} objects have low confidence (< {RELIABILITY_THRESHOLD})")
+
+            if LOW_CONFIDENCE_ACTION == "ask":
+                # Interactive mode
+                try:
+                    # Show preview
+                    try:
+                        with Image.open(original_path) as img_preview:
+                             img_preview.show()
+                    except Exception as e:
+                        print(f"  Could not display image: {e}")
+
+                    # List items
+                    print("  Low confidence items:")
+                    for i, item in enumerate(low_confidence_items):
+                        print(f"    - {item.get('nom')} (Qty: {item.get('quantite')}, Score: {item.get('fiabilite')})")
+
+                    user_input = input("  [ENTER] Accept, [m] Move to Manual Review, or type a HINT to re-analyze: ").strip()
+
+                    if user_input.lower() == 'm':
+                        action_taken = "move"
+                    elif user_input == "":
+                        action_taken = "proceed"
+                    else:
+                        # User provided a hint, re-analyze
+                        print(f"  Re-analyzing with hint: '{user_input}'...")
+                        results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True, user_hint=user_input)
+                        if not isinstance(results, list):
+                            results = [results]
+
+                        # Re-check reliability just for display
+                        new_low_conf = [item for item in results if int(item.get("fiabilite", 0)) < RELIABILITY_THRESHOLD]
+                        if new_low_conf:
+                             print(f"  Still {len(new_low_conf)} items with low confidence.")
+                        else:
+                             print(f"  All items now above threshold.")
+
+                        action_taken = "proceed"
+
+                except EOFError:
+                    print("  Non-interactive mode detected, defaulting to move.")
+                    action_taken = "move"
+
+            elif LOW_CONFIDENCE_ACTION == "move":
+                action_taken = "move"
+
+        if action_taken == "move":
+             # Create review folder if needed
+            review_dir = os.path.join(folder_path, MANUAL_REVIEW_FOLDER_NAME)
+            if not os.path.exists(review_dir):
+                os.makedirs(review_dir)
+
+            dest_path = os.path.join(review_dir, filename)
+            try:
+                # Ensure unique filename
+                if os.path.exists(dest_path):
+                     dest_path = get_unique_filepath(review_dir, filename)
+
+                shutil.move(original_path, dest_path)
+                print(f"  Moved to manual review: {os.path.basename(dest_path)}")
+
+                # Skip CSV entry only if move was successful
+                continue
+            except Exception as e:
+                print(f"  Error moving file: {e}")
+                print(f"  Proceeding with adding to CSV despite low confidence.")
 
         # Convert image to base64 (once per image)
         image_base64 = ""
