@@ -1,5 +1,6 @@
 import os
 import datetime
+import sys
 import pandas as pd
 import argparse
 from inventory_ai import analyze_image_multiple, load_categories
@@ -246,266 +247,307 @@ def main():
     force_interaction = False # Flag to force prompt when going back
 
     while i < len(images):
-        index = i + 1
-        filename = current_filenames[i]
-        original_path = os.path.join(folder_path, filename)
+        try:
+            index = i + 1
+            filename = current_filenames[i]
+            original_path = os.path.join(folder_path, filename)
 
-        # Check if file exists (might be missing if we messed up restoration or external deletion)
-        if not os.path.exists(original_path):
-             print(f"Warning: File {filename} not found at {original_path}. Skipping.")
-             i += 1
-             continue
+            # Check if file exists (might be missing if we messed up restoration or external deletion)
+            if not os.path.exists(original_path):
+                 print(f"Warning: File {filename} not found at {original_path}. Skipping.")
+                 i += 1
+                 continue
 
-        print(f"Processing [{index}/{len(images)}]: {filename}...")
+            print(f"Processing [{index}/{len(images)}]: {filename}...")
 
-        # Initial Analysis (high_quality=True for counting/detail)
-        results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True)
+            # Initial Analysis (high_quality=True for counting/detail)
+            results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True)
 
-        if not isinstance(results, list):
-            results = [results] # Handle error case returning dict
+            if not isinstance(results, list):
+                results = [results] # Handle error case returning dict
 
-        # Reliability Check
-        low_confidence_items = []
-        for item in results:
-            score = item.get("fiabilite", 0)
-            try:
-                score = int(score)
-            except:
-                score = 0
-            if score < RELIABILITY_THRESHOLD:
-                low_confidence_items.append(item)
-
-        action_taken = "proceed"
-        should_interact = False
-
-        if low_confidence_items:
-            print(f"  Warning: {len(low_confidence_items)} objects have low confidence (< {RELIABILITY_THRESHOLD})")
-            if LOW_CONFIDENCE_ACTION == "ask":
-                should_interact = True
-        elif force_interaction:
-            should_interact = True
-
-        if should_interact:
-            # Interactive mode
-            force_interaction = False # Reset flag
-            try:
-                # Show preview
+            # Reliability Check
+            low_confidence_items = []
+            for item in results:
+                score = item.get("fiabilite", 0)
                 try:
-                    with Image.open(original_path) as img_preview:
-                            img_preview.show()
-                except Exception as e:
-                    print(f"  Could not display image: {e}")
+                    score = int(score)
+                except:
+                    score = 0
+                if score < RELIABILITY_THRESHOLD:
+                    low_confidence_items.append(item)
 
-                # List items if meaningful
-                if low_confidence_items:
-                    print("  Low confidence items:")
-                    for j, item in enumerate(low_confidence_items):
-                        print(f"    - {item.get('nom')} (Qty: {item.get('quantite')}, Score: {item.get('fiabilite')})")
-                else:
-                    print("  Reviewing item (forced back):")
-                    for j, item in enumerate(results):
-                         print(f"    - {item.get('nom')} (Qty: {item.get('quantite')}, Score: {item.get('fiabilite')})")
+            action_taken = "proceed"
+            should_interact = False
 
-                while True:
-                    user_input = input("  [ENTER] Accept, [m] Move to Manual Review, [b] Back, or type a HINT to re-analyze: ").strip()
+            if low_confidence_items:
+                print(f"  Warning: {len(low_confidence_items)} objects have low confidence (< {RELIABILITY_THRESHOLD})")
+                if LOW_CONFIDENCE_ACTION == "ask":
+                    should_interact = True
+            elif force_interaction:
+                should_interact = True
 
-                    if user_input.lower() == 'b':
-                        if i > 0:
-                            print("  <-- Going back to previous image...")
-                            i -= 1
-                            prev_index = i
+            if should_interact:
+                # Interactive mode
+                force_interaction = False # Reset flag
+                try:
+                    # Show preview
+                    try:
+                        with Image.open(original_path) as img_preview:
+                                img_preview.show()
+                    except Exception as e:
+                        print(f"  Could not display image: {e}")
 
-                            # Remove data for this index and any subsequent
-                            # In counter.py, ID maps to image index.
-                            data = [row for row in data if row['ID'] < prev_index + 1]
+                    # List items if meaningful
+                    if low_confidence_items:
+                        print("  Low confidence items:")
+                        for j, item in enumerate(low_confidence_items):
+                            print(f"    - {item.get('nom')} (Qty: {item.get('quantite')}, Score: {item.get('fiabilite')})")
+                    else:
+                        print("  Reviewing item (forced back):")
+                        for j, item in enumerate(results):
+                             print(f"    - {item.get('nom')} (Qty: {item.get('quantite')}, Score: {item.get('fiabilite')})")
 
-                            # Check if we need to restore a moved file
-                            if prev_index in moved_files:
-                                moved_path = moved_files[prev_index]
-                                restored_name = current_filenames[prev_index]
-                                restored_path = os.path.join(folder_path, restored_name)
+                    while True:
+                        user_input = input("  [ENTER] Accept, [m] Move to Manual Review, [b] Back, or type a HINT to re-analyze: ").strip()
 
-                                if os.path.exists(moved_path):
-                                    try:
-                                        shutil.move(moved_path, restored_path)
-                                        print(f"  Restored {restored_name} from manual review.")
-                                        del moved_files[prev_index]
-                                    except Exception as e:
-                                        print(f"  Error restoring file: {e}")
-                                else:
-                                    print(f"  Warning: Could not find file to restore: {moved_path}")
+                        if user_input.lower() == 'b':
+                            if i > 0:
+                                print("  <-- Going back to previous image...")
+                                i -= 1
+                                prev_index = i
 
-                            force_interaction = True # Force prompt on the previous image
-                            action_taken = "back"
+                                # Remove data for this index and any subsequent
+                                # In counter.py, ID maps to image index.
+                                data = [row for row in data if row['ID'] < prev_index + 1]
+
+                                # Check if we need to restore a moved file
+                                if prev_index in moved_files:
+                                    moved_path = moved_files[prev_index]
+                                    restored_name = current_filenames[prev_index]
+                                    restored_path = os.path.join(folder_path, restored_name)
+
+                                    if os.path.exists(moved_path):
+                                        try:
+                                            shutil.move(moved_path, restored_path)
+                                            print(f"  Restored {restored_name} from manual review.")
+                                            del moved_files[prev_index]
+                                        except Exception as e:
+                                            print(f"  Error restoring file: {e}")
+                                    else:
+                                        print(f"  Warning: Could not find file to restore: {moved_path}")
+
+                                force_interaction = True # Force prompt on the previous image
+                                action_taken = "back"
+                                break
+                            else:
+                                print("  Already at the first image.")
+                                continue
+
+                        elif user_input.lower() == 'm':
+                            action_taken = "move"
+                            break
+                        elif user_input == "":
+                            action_taken = "proceed"
                             break
                         else:
-                            print("  Already at the first image.")
+                            # User provided a hint, re-analyze
+                            print(f"  Re-analyzing with hint: '{user_input}'...")
+                            results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True, user_hint=user_input)
+                            if not isinstance(results, list):
+                                results = [results]
+
+                            # Re-check reliability just for display
+                            new_low_conf = [item for item in results if int(item.get("fiabilite", 0)) < RELIABILITY_THRESHOLD]
+                            if new_low_conf:
+                                    print(f"  Still {len(new_low_conf)} items with low confidence.")
+                            else:
+                                    print(f"  All items now above threshold.")
+
+                            # Loop again to let user verify
+                            low_confidence_items = new_low_conf
                             continue
 
-                    elif user_input.lower() == 'm':
-                        action_taken = "move"
-                        break
-                    elif user_input == "":
-                        action_taken = "proceed"
-                        break
-                    else:
-                        # User provided a hint, re-analyze
-                        print(f"  Re-analyzing with hint: '{user_input}'...")
-                        results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True, user_hint=user_input)
-                        if not isinstance(results, list):
-                            results = [results]
+                except EOFError:
+                    print("  Non-interactive mode detected, defaulting to move.")
+                    action_taken = "move"
 
-                        # Re-check reliability just for display
-                        new_low_conf = [item for item in results if int(item.get("fiabilite", 0)) < RELIABILITY_THRESHOLD]
-                        if new_low_conf:
-                                print(f"  Still {len(new_low_conf)} items with low confidence.")
-                        else:
-                                print(f"  All items now above threshold.")
+            elif low_confidence_items and LOW_CONFIDENCE_ACTION == "move":
+                 action_taken = "move"
 
-                        # Loop again to let user verify
-                        low_confidence_items = new_low_conf
-                        continue
-
-            except EOFError:
-                print("  Non-interactive mode detected, defaulting to move.")
-                action_taken = "move"
-
-        elif low_confidence_items and LOW_CONFIDENCE_ACTION == "move":
-             action_taken = "move"
-
-        if action_taken == "back":
-            continue
-
-        if action_taken == "move":
-             # Create review folder if needed
-            review_dir = os.path.join(folder_path, MANUAL_REVIEW_FOLDER_NAME)
-            if not os.path.exists(review_dir):
-                os.makedirs(review_dir)
-
-            dest_path = os.path.join(review_dir, filename)
-            try:
-                # Ensure unique filename
-                if os.path.exists(dest_path):
-                     dest_path = get_unique_filepath(review_dir, filename)
-
-                shutil.move(original_path, dest_path)
-                print(f"  Moved to manual review: {os.path.basename(dest_path)}")
-
-                moved_files[i] = dest_path
-                i += 1
-                # Skip CSV entry only if move was successful
+            if action_taken == "back":
                 continue
-            except Exception as e:
-                print(f"  Error moving file: {e}")
-                print(f"  Proceeding with adding to CSV despite low confidence.")
 
-        # Convert image to base64 (once per image)
-        image_base64 = ""
-        if INCLUDE_IMAGE_BASE64:
-            image_base64 = resize_and_convert_to_base64(original_path)
+            if action_taken == "move":
+                 # Create review folder if needed
+                review_dir = os.path.join(folder_path, MANUAL_REVIEW_FOLDER_NAME)
+                if not os.path.exists(review_dir):
+                    os.makedirs(review_dir)
 
-        # Determine if we should rename based on target
-        if target_element:
-            # Calculate total quantity for naming
-            total_quantity = 0
-            for item in results:
+                dest_path = os.path.join(review_dir, filename)
                 try:
-                    total_quantity += int(item.get("quantite", 0))
-                except (ValueError, TypeError):
-                    pass
+                    # Ensure unique filename
+                    if os.path.exists(dest_path):
+                         dest_path = get_unique_filepath(review_dir, filename)
 
-            sanitized_target = sanitize_filename(target_element)
-            ext = os.path.splitext(filename)[1]
-            proposed_filename = f"{total_quantity}_{sanitized_target}{ext}"
+                    shutil.move(original_path, dest_path)
+                    print(f"  Moved to manual review: {os.path.basename(dest_path)}")
 
-            # Check collision
-            if proposed_filename != filename:
-                new_path_full = get_unique_filepath(folder_path, proposed_filename)
-                new_filename = os.path.basename(new_path_full)
-            else:
-                new_path_full = original_path
-                new_filename = filename
+                    moved_files[i] = dest_path
+                    i += 1
+                    # Skip CSV entry only if move was successful
+                    continue
+                except Exception as e:
+                    print(f"  Error moving file: {e}")
+                    print(f"  Proceeding with adding to CSV despite low confidence.")
 
-            # Compress/Rename to new name safely using a temp file first
-            temp_path = os.path.join(folder_path, f"temp_{filename}")
-            try:
-                # 1. Compress to temp file
-                compress_image_to_target(original_path, temp_path)
-
-                # 2. Move temp file to final destination (new_path_full)
-                if os.path.exists(temp_path):
-                    shutil.move(temp_path, new_path_full)
-
-                    # 3. If we renamed (new path != original), delete original if it still exists
-                    # Note: if new_path_full == original_path, we just overwrote it safely via temp, so no delete needed.
-                    if new_path_full != original_path and os.path.exists(original_path):
-                         os.remove(original_path)
-
-                    filename = new_filename # Update variable for CSV
-                    if new_path_full != original_path:
-                        print(f"  Renamed to: {filename}")
-                        current_filenames[i] = new_filename
-
-            except Exception as e:
-                 print(f"  Warning: Could not rename {filename} to {new_filename}: {e}")
-                 if os.path.exists(temp_path):
-                     os.remove(temp_path)
-        else:
-            # Original behavior: compress in place (temp then move back)
-            temp_path = os.path.join(folder_path, f"temp_{filename}")
-            try:
-                compress_image_to_target(original_path, temp_path)
-                # If temp exists and is different from original (it should be different path)
-                if os.path.exists(temp_path):
-                     # Replace original with compressed
-                     shutil.move(temp_path, original_path)
-                     # print(f"  Optimized image: {filename}")
-            except Exception as e:
-                print(f"  Warning: Could not optimize {filename}: {e}")
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-
-        for item in results:
-            nom_objet = item.get("nom", "Inconnu")
-
-            prix_unitaire = item.get("prix_unitaire_estime", 0)
-            try:
-                prix_unitaire = int(float(prix_unitaire))
-            except (ValueError, TypeError):
-                prix_unitaire = 0
-
-            prix_neuf = item.get("prix_neuf_estime", 0)
-            try:
-                prix_neuf = int(float(prix_neuf))
-            except (ValueError, TypeError):
-                prix_neuf = 0
-
-            quantite_val = item.get("quantite", 0)
-            try:
-                quantite_val = int(quantite_val)
-            except (ValueError, TypeError):
-                quantite_val = 0
-
-            prix_total = prix_unitaire * quantite_val
-
-            row = {
-                "ID": index,
-                "Fichier": filename,
-                "Nom": nom_objet,
-                "Categorie": item.get("categorie", "Inconnu"),
-                "Categorie ID": item.get("categorie_id", "Inconnu"),
-                "Fiabilite": item.get("fiabilite", 0),
-                "Quantite": quantite_val,
-                "Etat": item.get("etat", "Inconnu"),
-                "Prix Unitaire": prix_unitaire,
-                "Prix Neuf Estime": prix_neuf,
-                "Prix Total": prix_total
-            }
+            # Convert image to base64 (once per image)
+            image_base64 = ""
             if INCLUDE_IMAGE_BASE64:
-                row["Image"] = image_base64
-            data.append(row)
+                image_base64 = resize_and_convert_to_base64(original_path)
 
-        i += 1
+            # Determine if we should rename based on target
+            if target_element:
+                # Calculate total quantity for naming
+                total_quantity = 0
+                for item in results:
+                    try:
+                        total_quantity += int(item.get("quantite", 0))
+                    except (ValueError, TypeError):
+                        pass
+
+                sanitized_target = sanitize_filename(target_element)
+                ext = os.path.splitext(filename)[1]
+                proposed_filename = f"{total_quantity}_{sanitized_target}{ext}"
+
+                # Check collision
+                if proposed_filename != filename:
+                    new_path_full = get_unique_filepath(folder_path, proposed_filename)
+                    new_filename = os.path.basename(new_path_full)
+                else:
+                    new_path_full = original_path
+                    new_filename = filename
+
+                # Compress/Rename to new name safely using a temp file first
+                temp_path = os.path.join(folder_path, f"temp_{filename}")
+                try:
+                    # 1. Compress to temp file
+                    compress_image_to_target(original_path, temp_path)
+
+                    # 2. Move temp file to final destination (new_path_full)
+                    if os.path.exists(temp_path):
+                        shutil.move(temp_path, new_path_full)
+
+                        # 3. If we renamed (new path != original), delete original if it still exists
+                        # Note: if new_path_full == original_path, we just overwrote it safely via temp, so no delete needed.
+                        if new_path_full != original_path and os.path.exists(original_path):
+                             os.remove(original_path)
+
+                        filename = new_filename # Update variable for CSV
+                        if new_path_full != original_path:
+                            print(f"  Renamed to: {filename}")
+                            current_filenames[i] = new_filename
+
+                except Exception as e:
+                     print(f"  Warning: Could not rename {filename} to {new_filename}: {e}")
+                     if os.path.exists(temp_path):
+                         os.remove(temp_path)
+            else:
+                # Original behavior: compress in place (temp then move back)
+                temp_path = os.path.join(folder_path, f"temp_{filename}")
+                try:
+                    compress_image_to_target(original_path, temp_path)
+                    # If temp exists and is different from original (it should be different path)
+                    if os.path.exists(temp_path):
+                         # Replace original with compressed
+                         shutil.move(temp_path, original_path)
+                         # print(f"  Optimized image: {filename}")
+                except Exception as e:
+                    print(f"  Warning: Could not optimize {filename}: {e}")
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+            for item in results:
+                nom_objet = item.get("nom", "Inconnu")
+
+                prix_unitaire = item.get("prix_unitaire_estime", 0)
+                try:
+                    prix_unitaire = int(float(prix_unitaire))
+                except (ValueError, TypeError):
+                    prix_unitaire = 0
+
+                prix_neuf = item.get("prix_neuf_estime", 0)
+                try:
+                    prix_neuf = int(float(prix_neuf))
+                except (ValueError, TypeError):
+                    prix_neuf = 0
+
+                quantite_val = item.get("quantite", 0)
+                try:
+                    quantite_val = int(quantite_val)
+                except (ValueError, TypeError):
+                    quantite_val = 0
+
+                prix_total = prix_unitaire * quantite_val
+
+                row = {
+                    "ID": index,
+                    "Fichier": filename,
+                    "Nom": nom_objet,
+                    "Categorie": item.get("categorie", "Inconnu"),
+                    "Categorie ID": item.get("categorie_id", "Inconnu"),
+                    "Fiabilite": item.get("fiabilite", 0),
+                    "Quantite": quantite_val,
+                    "Etat": item.get("etat", "Inconnu"),
+                    "Prix Unitaire": prix_unitaire,
+                    "Prix Neuf Estime": prix_neuf,
+                    "Prix Total": prix_total
+                }
+                if INCLUDE_IMAGE_BASE64:
+                    row["Image"] = image_base64
+                data.append(row)
+
+            i += 1
+        except KeyboardInterrupt:
+            print("\n\n--- Paused by User ---")
+            while True:
+                choice = input("  [c] Continue/Retry, [b] Back, [q] Quit: ").strip().lower()
+                if choice == 'c':
+                    # i is not incremented yet if caught before i+=1
+                    # cleanup data for current attempt (ensure no partial row added)
+                    data = [row for row in data if row['ID'] < i + 1]
+                    print("  Resuming current image...")
+                    break # Restart loop at i
+                elif choice == 'b':
+                    if i > 0:
+                        print("  <-- Going back to previous image...")
+                        i -= 1
+                        prev_index = i
+
+                        # Remove data for this index and any subsequent
+                        data = [row for row in data if row['ID'] < prev_index + 1]
+
+                        # Restore file logic
+                        if prev_index in moved_files:
+                            moved_path = moved_files[prev_index]
+                            restored_name = current_filenames[prev_index]
+                            restored_path = os.path.join(folder_path, restored_name)
+
+                            if os.path.exists(moved_path):
+                                try:
+                                    shutil.move(moved_path, restored_path)
+                                    print(f"  Restored {restored_name} from manual review.")
+                                    del moved_files[prev_index]
+                                except Exception as e:
+                                    print(f"  Error restoring file: {e}")
+
+                        force_interaction = True
+                        break # Restart loop at i-1
+                    else:
+                        print("  Already at start.")
+                elif choice == 'q':
+                    print("Exiting...")
+                    sys.exit(0)
 
     # Create DataFrame and save to CSV
     df = pd.DataFrame(data)
