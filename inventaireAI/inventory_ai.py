@@ -32,7 +32,7 @@ def load_categories(csv_path="categories.csv"):
         return ""
     return categories_text
 
-def analyze_image(image_path, categories_context=None):
+def analyze_image(image_path, categories_context=None, user_hint=None):
     """
     Analyzes an image using Gemini to extract Name, Category, and Quantity.
     Returns a dictionary with these fields.
@@ -72,8 +72,13 @@ def analyze_image(image_path, categories_context=None):
                 'data': img_byte_arr.getvalue()
             }
             
+            hint_text = ""
+            if user_hint:
+                hint_text = f"USER HINT: The user provided this hint to help identification: '{user_hint}'. Use this to improve accuracy."
+
             prompt = f"""
             Analyze this image for an inventory system.
+            {hint_text}
             Identify the object and look for any handwritten or printed quantity on a paper next to it.
             Also look for any other text or notes written on the paper (e.g. size, condition, specific details).
             
@@ -89,6 +94,7 @@ def analyze_image(image_path, categories_context=None):
             - "etat": The condition of the object. Must be either "Neuf" or "Occasion".
             - "prix_unitaire_estime": An estimated unit price in Euros based on the object type and condition. Return as an integer (no decimals).
             - "prix_neuf_estime": An estimated new price in Euros if the object were bought new today. Return as an integer (no decimals).
+            - "fiabilite": A confidence score (0-100) indicating how reliable this identification and detail extraction is. Return as an integer.
             
             Example output format:
             {{
@@ -98,7 +104,8 @@ def analyze_image(image_path, categories_context=None):
                 "quantite": 6,
                 "etat": "Occasion",
                 "prix_unitaire_estime": 2,
-                "prix_neuf_estime": 5
+                "prix_neuf_estime": 5,
+                "fiabilite": 95
             }}
             """
             
@@ -122,10 +129,11 @@ def analyze_image(image_path, categories_context=None):
             "quantite": 0,
             "etat": "Inconnu",
             "prix_unitaire_estime": 0,
-            "prix_neuf_estime": 0
+            "prix_neuf_estime": 0,
+            "fiabilite": 0
         }
 
-def analyze_image_multiple(image_path, target_element=None, categories_context=None, high_quality=False):
+def analyze_image_multiple(image_path, target_element=None, categories_context=None, high_quality=False, user_hint=None):
     """
     Analyzes an image using Gemini to extract a list of objects (Name, Category, Quantity, etc.).
     Returns a list of dictionaries.
@@ -209,9 +217,14 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             else:
                 focus_instruction = "List and count all distinct types of objects visible in the image."
 
+            hint_text = ""
+            if user_hint:
+                hint_text = f"USER HINT: The user provided this hint to help identification: '{user_hint}'. Use this to improve accuracy."
+
             prompt = f"""
             Analyze this image for an inventory system.
             {focus_instruction}
+            {hint_text}
             Look for any handwritten or printed quantity on a paper next to objects if present, otherwise count the visible items.
             Also look for any other text or notes written on the paper (e.g. size, condition, specific details).
 
@@ -227,6 +240,7 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             - "etat": The condition of the objects. Must be either "Neuf" or "Occasion".
             - "prix_unitaire_estime": An estimated unit price in Euros based on the object type and condition. Return as an integer (no decimals).
             - "prix_neuf_estime": An estimated new price in Euros if the object were bought new today. Return as an integer (no decimals).
+            - "fiabilite": A confidence score (0-100) indicating how reliable this identification and detail extraction is for this specific object. Return as an integer.
 
             Example output format:
             [
@@ -237,7 +251,8 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
                     "quantite": 3,
                     "etat": "Occasion",
                     "prix_unitaire_estime": 5,
-                    "prix_neuf_estime": 15
+                    "prix_neuf_estime": 15,
+                    "fiabilite": 90
                 }},
                 {{
                     "nom": "Tournevis",
@@ -246,7 +261,8 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
                     "quantite": 2,
                     "etat": "Occasion",
                     "prix_unitaire_estime": 2,
-                    "prix_neuf_estime": 5
+                    "prix_neuf_estime": 5,
+                    "fiabilite": 85
                 }}
             ]
             """
@@ -271,5 +287,6 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             "quantite": 0,
             "etat": "Inconnu",
             "prix_unitaire_estime": 0,
-            "prix_neuf_estime": 0
+            "prix_neuf_estime": 0,
+            "fiabilite": 0
         }]

@@ -29,6 +29,11 @@ INCLUDE_IMAGE_BASE64 = os.getenv("INCLUDE_IMAGE_BASE64", "True").lower() in ('tr
 
 ADDITIONAL_CSV_COLUMNS = os.getenv("ADDITIONAL_CSV_COLUMNS", "")
 
+# Reliability Settings
+RELIABILITY_THRESHOLD = int(os.getenv("RELIABILITY_THRESHOLD", 85))
+LOW_CONFIDENCE_ACTION = os.getenv("LOW_CONFIDENCE_ACTION", "move") # 'move' or 'ask'
+MANUAL_REVIEW_FOLDER_NAME = os.getenv("MANUAL_REVIEW_FOLDER", "manual_review")
+
 def sanitize_filename(name):
     # Remove invalid characters for Windows/Linux filenames
     name = re.sub(r'[<>:"/\\|?*]', '', name)
@@ -232,9 +237,79 @@ def main():
 
         print(f"Processing [{index}/{len(images)}]: {filename}...")
         
-        # Analyze image
+        # Initial Analysis
         result = analyze_image(original_path, categories_context=categories_context)
         
+        # Reliability Check
+        fiabilite = result.get("fiabilite", 0)
+        try:
+             fiabilite = int(fiabilite)
+        except:
+             fiabilite = 0
+
+        action_taken = "proceed" # proceed, skip (moved), ignore (processed despite low score)
+
+        if fiabilite < RELIABILITY_THRESHOLD:
+            print(f"  Warning: Low confidence score ({fiabilite} < {RELIABILITY_THRESHOLD})")
+
+            if LOW_CONFIDENCE_ACTION == "ask":
+                # Interactive mode
+                try:
+                    print(f"  Identified: {result.get('nom')} (Qty: {result.get('quantite')})")
+                    # Try to open the image for the user
+                    try:
+                        with Image.open(original_path) as img_preview:
+                             img_preview.show()
+                    except Exception as e:
+                        print(f"  Could not display image: {e}")
+
+                    user_input = input("  [ENTER] Accept, [m] Move to Manual Review, or type a HINT to re-analyze: ").strip()
+
+                    if user_input.lower() == 'm':
+                        action_taken = "move"
+                    elif user_input == "":
+                        action_taken = "proceed"
+                    else:
+                        # User provided a hint, re-analyze
+                        print(f"  Re-analyzing with hint: '{user_input}'...")
+                        result = analyze_image(original_path, categories_context=categories_context, user_hint=user_input)
+                        new_score = result.get("fiabilite", 0)
+                        print(f"  New Result: {result.get('nom')} (Score: {new_score})")
+                        # We assume the user accepts the new result (or we could loop again, but let's keep it simple for now: one retry)
+                        action_taken = "proceed"
+
+                except EOFError:
+                    # Handle non-interactive environments
+                    print("  Non-interactive mode detected, defaulting to move.")
+                    action_taken = "move"
+
+            elif LOW_CONFIDENCE_ACTION == "move":
+                action_taken = "move"
+            else:
+                # 'log' or other
+                action_taken = "proceed" # Just logged warning above
+
+        if action_taken == "move":
+            # Create review folder if needed
+            review_dir = os.path.join(folder_path, MANUAL_REVIEW_FOLDER_NAME)
+            if not os.path.exists(review_dir):
+                os.makedirs(review_dir)
+
+            dest_path = os.path.join(review_dir, filename)
+            try:
+                # Ensure unique filename in review folder
+                if os.path.exists(dest_path):
+                     dest_path = get_unique_filepath(review_dir, filename)
+
+                shutil.move(original_path, dest_path)
+                print(f"  Moved to manual review: {os.path.basename(dest_path)}")
+
+                # Skip adding to CSV only if move was successful
+                continue
+            except Exception as e:
+                print(f"  Error moving file: {e}")
+                print(f"  Proceeding with adding to CSV despite low confidence.")
+
         # Determine new filename based on object name
         nom_objet = result.get("nom", "Inconnu")
         quantite = result.get("quantite", 0)
