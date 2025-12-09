@@ -424,6 +424,7 @@ def main():
                 "Nom": nom_objet,
                 "Categorie": item.get("categorie", "Inconnu"),
                 "Categorie ID": item.get("categorie_id", "Inconnu"),
+                "Fiabilite": item.get("fiabilite", 0),
                 "Quantite": quantite_val,
                 "Etat": item.get("etat", "Inconnu"),
                 "Prix Unitaire": prix_unitaire,
@@ -446,7 +447,7 @@ def main():
     # Reorder columns
     cols = df.columns.tolist()
     desired_known_order = [
-        "ID", "Fichier", "Image", "Categorie", "Categorie ID",
+        "ID", "Fichier", "Image", "Categorie", "Categorie ID", "Fiabilite",
         "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
         "Nom", "Etat", "Quantite"
     ]
