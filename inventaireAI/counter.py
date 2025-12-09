@@ -239,8 +239,22 @@ def main():
     # Preload categories
     categories_context = load_categories()
 
-    for index, filename in enumerate(images, start=1):
+    current_filenames = list(images) # Track filenames as they might change
+    moved_files = {} # Track moved files to restore them if we go back: index -> path_in_review
+
+    i = 0
+    force_interaction = False # Flag to force prompt when going back
+
+    while i < len(images):
+        index = i + 1
+        filename = current_filenames[i]
         original_path = os.path.join(folder_path, filename)
+
+        # Check if file exists (might be missing if we messed up restoration or external deletion)
+        if not os.path.exists(original_path):
+             print(f"Warning: File {filename} not found at {original_path}. Skipping.")
+             i += 1
+             continue
 
         print(f"Processing [{index}/{len(images)}]: {filename}...")
 
@@ -262,30 +276,78 @@ def main():
                 low_confidence_items.append(item)
 
         action_taken = "proceed"
+        should_interact = False
+
         if low_confidence_items:
             print(f"  Warning: {len(low_confidence_items)} objects have low confidence (< {RELIABILITY_THRESHOLD})")
-
             if LOW_CONFIDENCE_ACTION == "ask":
-                # Interactive mode
+                should_interact = True
+        elif force_interaction:
+            should_interact = True
+
+        if should_interact:
+            # Interactive mode
+            force_interaction = False # Reset flag
+            try:
+                # Show preview
                 try:
-                    # Show preview
-                    try:
-                        with Image.open(original_path) as img_preview:
-                             img_preview.show()
-                    except Exception as e:
-                        print(f"  Could not display image: {e}")
+                    with Image.open(original_path) as img_preview:
+                            img_preview.show()
+                except Exception as e:
+                    print(f"  Could not display image: {e}")
 
-                    # List items
+                # List items if meaningful
+                if low_confidence_items:
                     print("  Low confidence items:")
-                    for i, item in enumerate(low_confidence_items):
+                    for j, item in enumerate(low_confidence_items):
                         print(f"    - {item.get('nom')} (Qty: {item.get('quantite')}, Score: {item.get('fiabilite')})")
+                else:
+                    print("  Reviewing item (forced back):")
+                    for j, item in enumerate(results):
+                         print(f"    - {item.get('nom')} (Qty: {item.get('quantite')}, Score: {item.get('fiabilite')})")
 
-                    user_input = input("  [ENTER] Accept, [m] Move to Manual Review, or type a HINT to re-analyze: ").strip()
+                while True:
+                    user_input = input("  [ENTER] Accept, [m] Move to Manual Review, [b] Back, or type a HINT to re-analyze: ").strip()
 
-                    if user_input.lower() == 'm':
+                    if user_input.lower() == 'b':
+                        if i > 0:
+                            print("  <-- Going back to previous image...")
+                            i -= 1
+                            prev_index = i
+
+                            # Remove data for this index and any subsequent
+                            # In counter.py, ID maps to image index.
+                            data = [row for row in data if row['ID'] < prev_index + 1]
+
+                            # Check if we need to restore a moved file
+                            if prev_index in moved_files:
+                                moved_path = moved_files[prev_index]
+                                restored_name = current_filenames[prev_index]
+                                restored_path = os.path.join(folder_path, restored_name)
+
+                                if os.path.exists(moved_path):
+                                    try:
+                                        shutil.move(moved_path, restored_path)
+                                        print(f"  Restored {restored_name} from manual review.")
+                                        del moved_files[prev_index]
+                                    except Exception as e:
+                                        print(f"  Error restoring file: {e}")
+                                else:
+                                    print(f"  Warning: Could not find file to restore: {moved_path}")
+
+                            force_interaction = True # Force prompt on the previous image
+                            action_taken = "back"
+                            break
+                        else:
+                            print("  Already at the first image.")
+                            continue
+
+                    elif user_input.lower() == 'm':
                         action_taken = "move"
+                        break
                     elif user_input == "":
                         action_taken = "proceed"
+                        break
                     else:
                         # User provided a hint, re-analyze
                         print(f"  Re-analyzing with hint: '{user_input}'...")
@@ -296,18 +358,23 @@ def main():
                         # Re-check reliability just for display
                         new_low_conf = [item for item in results if int(item.get("fiabilite", 0)) < RELIABILITY_THRESHOLD]
                         if new_low_conf:
-                             print(f"  Still {len(new_low_conf)} items with low confidence.")
+                                print(f"  Still {len(new_low_conf)} items with low confidence.")
                         else:
-                             print(f"  All items now above threshold.")
+                                print(f"  All items now above threshold.")
 
-                        action_taken = "proceed"
+                        # Loop again to let user verify
+                        low_confidence_items = new_low_conf
+                        continue
 
-                except EOFError:
-                    print("  Non-interactive mode detected, defaulting to move.")
-                    action_taken = "move"
-
-            elif LOW_CONFIDENCE_ACTION == "move":
+            except EOFError:
+                print("  Non-interactive mode detected, defaulting to move.")
                 action_taken = "move"
+
+        elif low_confidence_items and LOW_CONFIDENCE_ACTION == "move":
+             action_taken = "move"
+
+        if action_taken == "back":
+            continue
 
         if action_taken == "move":
              # Create review folder if needed
@@ -324,6 +391,8 @@ def main():
                 shutil.move(original_path, dest_path)
                 print(f"  Moved to manual review: {os.path.basename(dest_path)}")
 
+                moved_files[i] = dest_path
+                i += 1
                 # Skip CSV entry only if move was successful
                 continue
             except Exception as e:
@@ -375,6 +444,7 @@ def main():
                     filename = new_filename # Update variable for CSV
                     if new_path_full != original_path:
                         print(f"  Renamed to: {filename}")
+                        current_filenames[i] = new_filename
 
             except Exception as e:
                  print(f"  Warning: Could not rename {filename} to {new_filename}: {e}")
@@ -434,6 +504,8 @@ def main():
             if INCLUDE_IMAGE_BASE64:
                 row["Image"] = image_base64
             data.append(row)
+
+        i += 1
 
     # Create DataFrame and save to CSV
     df = pd.DataFrame(data)
