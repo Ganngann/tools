@@ -276,11 +276,21 @@ def main():
     current_desired_order = [c for c in desired_known_order if c != "Image" or INCLUDE_IMAGE_BASE64]
     full_columns = current_desired_order + custom_cols
 
-    if not os.path.exists(csv_path):
+    # Initialize next_id based on existing CSV
+    next_id = 1
+    if os.path.exists(csv_path):
+        try:
+            existing_df = pd.read_csv(csv_path, sep=CSV_SEPARATOR)
+            if "ID" in existing_df.columns and not existing_df["ID"].empty:
+                 # Handle cases where ID might be string or have NaNs
+                 ids = pd.to_numeric(existing_df["ID"], errors='coerce').fillna(0).astype(int)
+                 if not ids.empty:
+                    next_id = ids.max() + 1
+        except Exception as e:
+            print(f"Warning: Could not read existing CSV to determine next ID: {e}")
+    else:
         # Create empty DataFrame with columns to write header
         pd.DataFrame(columns=full_columns).to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
-    
-    # data = [] # No longer needed for batch save
     
     # Preload categories once to pass to analyze_image
     categories_context = load_categories()
@@ -289,6 +299,24 @@ def main():
         original_path = os.path.join(folder_path, filename)
 
         print(f"Processing [{index}/{len(images)}]: {filename}...")
+        
+        # Determine Object ID (from filename or new)
+        obj_id = None
+        # Regex to match ID at the END of filename: ..._ID.ext
+        # We look for _(\d+) followed by extension
+        match = re.search(r'_(\d+)\.[^.]+$', filename)
+        if match:
+             try:
+                 obj_id = int(match.group(1))
+                 print(f"  Existing ID found: {obj_id}")
+             except ValueError:
+                 pass
+        
+        if obj_id is None:
+             obj_id = next_id
+             next_id += 1
+             print(f"  Assigned new ID: {obj_id}")
+
         
         # Initial Analysis
         result = analyze_image(original_path, categories_context=categories_context, folder_context=folder_context)
@@ -369,10 +397,11 @@ def main():
 
         sanitized_name = sanitize_filename(nom_objet)
         if not sanitized_name:
-            sanitized_name = f"Item_{index}"
+            sanitized_name = "Item"
 
         ext = os.path.splitext(filename)[1]
-        proposed_filename = f"{quantite}_{sanitized_name}{ext}"
+        # Filename format: Quantite_Nom_ID.ext
+        proposed_filename = f"{quantite}_{sanitized_name}_{obj_id}{ext}"
 
         if proposed_filename != filename:
             # Create processed folder
@@ -418,7 +447,7 @@ def main():
         prix_total = prix_unitaire * quantite_val
 
         row = {
-            "ID": index,
+            "ID": obj_id,
             "Fichier Original": new_filename,
             "Nom": nom_objet,
             "Categorie": result.get("categorie", "Inconnu"),
@@ -442,17 +471,53 @@ def main():
             else:
                  print(f"  Processed file: {new_filename}")
             
-            # Save row to CSV ONLY if move was successful (implicit by reaching here)
-            df_row = pd.DataFrame([row])
-            
-            # Add empty columns if configured
-            for col in custom_cols:
-                df_row[col] = ""
+            # Save row to CSV (Update or Append)
+            try:
+                # Read full CSV to check for existence and update
+                current_df = pd.DataFrame()
+                if os.path.exists(csv_path):
+                     # Read all columns as string to avoid type issues, then convert specific ones?
+                     # Or just rely on standard pandas inference.
+                     current_df = pd.read_csv(csv_path, sep=CSV_SEPARATOR)
+                
+                # Create DataFrame for current row
+                row_df = pd.DataFrame([row])
+                 # Add empty columns if configured
+                for col in custom_cols:
+                    row_df[col] = ""
+                # Ensure correct column order
+                row_df = row_df[full_columns]
 
-            # Reorder columns
-            df_row = df_row[full_columns]
-            
-            df_row.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+                if not current_df.empty and "ID" in current_df.columns:
+                     # Check if ID exists
+                     # Ensure ID column types match (int)
+                     current_df["ID"] = pd.to_numeric(current_df["ID"], errors='coerce').fillna(-1).astype(int)
+                     
+                     if obj_id in current_df["ID"].values:
+                         # Update existing row
+                         # We need to align columns before updating
+                         # Drop columns in current_df that are not in full_columns? No, keep structure.
+                         
+                         # Find index
+                         idx = current_df.index[current_df["ID"] == obj_id].tolist()[0]
+                         
+                         # Update columns one by one? Or replace row.
+                         for col in full_columns:
+                             current_df.at[idx, col] = row_df.iloc[0][col]
+                         
+                         current_df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+                         print(f"  Updated CSV row for ID: {obj_id}")
+                     else:
+                         # Append
+                         row_df.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+                         print(f"  Appended CSV row for ID: {obj_id}")
+                else:
+                    # Append (CSV empty or no ID col)
+                    row_df.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+                    print(f"  Appended CSV row for ID: {obj_id}")
+
+            except Exception as e:
+                print(f"  Error updating CSV: {e}")
 
         except Exception as e:
             print(f"  Warning: Could not process {filename} to {new_filename}: {e}")
