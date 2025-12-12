@@ -32,7 +32,7 @@ def load_categories(csv_path="categories.csv"):
         return ""
     return categories_text
 
-def analyze_image(image_path, categories_context=None, user_hint=None):
+def analyze_image(image_path, categories_context=None, user_hint=None, folder_context=None):
     """
     Analyzes an image using Gemini to extract Name, Category, and Quantity.
     Returns a dictionary with these fields.
@@ -75,9 +75,14 @@ def analyze_image(image_path, categories_context=None, user_hint=None):
             hint_text = ""
             if user_hint:
                 hint_text = f"USER HINT: The user provided this hint to help identification: '{user_hint}'. Use this to improve accuracy."
+            
+            context_text = ""
+            if folder_context:
+                context_text = f"GLOBAL CONTEXT/INSTRUCTIONS: The user provided this global context for the entire batch of images: '{folder_context}'. ALWAYS apply these instructions."
 
             prompt = f"""
             Analyze this image for an inventory system.
+            {context_text}
             {hint_text}
             Identify the object and look for any handwritten or printed quantity on a paper next to it.
             Also look for any other text or notes written on the paper (e.g. size, condition, specific details).

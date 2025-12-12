@@ -228,6 +228,34 @@ def main():
 
     print(f"Found {len(images)} images. Starting processing...")
     
+    # Check for context/instructions file
+    folder_context = ""
+    potential_context_files = ["context.txt", "instructions.txt"]
+    for ctx_file in potential_context_files:
+        ctx_path = os.path.join(folder_path, ctx_file)
+        if os.path.exists(ctx_path):
+            try:
+                with open(ctx_path, "r", encoding="utf-8") as f:
+                    folder_context = f.read().strip()
+                print(f"Loaded instructions from {ctx_file}")
+                break
+            except Exception as e:
+                print(f"Error reading {ctx_file}: {e}")
+    else:
+        # No context file found, ask user
+        print("Aucun fichier d'instructions (context.txt) trouvé.")
+        user_context_input = input("Entrez des instructions globales pour ce dossier (ou Appuyez sur Entrée pour ignorer) : ").strip()
+        if user_context_input:
+            folder_context = user_context_input
+            # Save it for future runs or record
+            ctx_save_path = os.path.join(folder_path, "context.txt")
+            try:
+                with open(ctx_save_path, "w", encoding="utf-8") as f:
+                    f.write(folder_context)
+                print(f"Instructions enregistrées dans {ctx_save_path}")
+            except Exception as e:
+                print(f"Attention: Impossible de sauvegarder context.txt: {e}")
+    
     # CSV name based on folder name
     folder_name = os.path.basename(os.path.normpath(folder_path))
     csv_filename = f"{folder_name}.csv"
@@ -263,7 +291,7 @@ def main():
         print(f"Processing [{index}/{len(images)}]: {filename}...")
         
         # Initial Analysis
-        result = analyze_image(original_path, categories_context=categories_context)
+        result = analyze_image(original_path, categories_context=categories_context, folder_context=folder_context)
         
         # Reliability Check
         fiabilite = result.get("fiabilite", 0)
@@ -297,7 +325,7 @@ def main():
                     else:
                         # User provided a hint, re-analyze
                         print(f"  Re-analyzing with hint: '{user_input}'...")
-                        result = analyze_image(original_path, categories_context=categories_context, user_hint=user_input)
+                        result = analyze_image(original_path, categories_context=categories_context, user_hint=user_input, folder_context=folder_context)
                         new_score = result.get("fiabilite", 0)
                         print(f"  New Result: {result.get('nom')} (Score: {new_score})")
                         # We assume the user accepts the new result (or we could loop again, but let's keep it simple for now: one retry)

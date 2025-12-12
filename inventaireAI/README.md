@@ -5,15 +5,12 @@ Ce projet permet de générer automatiquement un inventaire Excel (CSV) à parti
 ## Fonctionnalités
 
 1.  **Analyse d'image** : Identifie l'objet, la catégorie (basée sur `categories.csv`) et la quantité.
-2.  **Renommage** : Renomme les fichiers images séquentiellement (ex: `1.jpg`, `2.jpg`...) pour correspondre à leur ordre dans l'inventaire.
-3.  **Export CSV** : Génère un fichier `.csv` à l'intérieur du dossier traité. Ce fichier contient :
-    *   **ID** : Numéro séquentiel.
-    *   **Fichier Original** : Nom d'origine du fichier.
-    *   **Image** : Aperçu de l'image encodé en Base64 (pour affichage direct dans certains outils ou reconversion).
-    *   **Nom** : Nom descriptif de l'objet.
-    *   **Categorie** : Nom de la catégorie (selon `categories.csv`).
-    *   **Categorie ID** : Identifiant unique de la catégorie.
-    *   **Quantite** : Quantité détectée ou estimée.
+2.  **Gestion du Contexte** : Permet de donner des instructions globales à l'IA pour tout un dossier (ex: "Ce sont des antiquités du 19ème siècle").
+3.  **Traitement Interruptible** :
+    *   Les images traitées sont déplacées dans un sous-dossier `traitees`.
+    *   L'inventaire CSV est mis à jour en temps réel après chaque image.
+    *   Vous pouvez arrêter et reprendre le traitement à tout moment sans perte de données.
+4.  **Renommage Intelligent** : Renomme les fichiers images avec la quantité et le nom de l'objet (ex: `1_Chaise_Bois.jpg`).
 
 ## Prérequis
 
@@ -43,11 +40,14 @@ Il y a deux façons de lancer l'inventaire :
 *   Double-cliquez sur **`start.bat`**.
 *   Le programme vous demandera de glisser le dossier dans la fenêtre noire. Faites-le et appuyez sur Entrée.
 
-**Déroulement :**
-1.  Le script scanne toutes les images du dossier (`.jpg`, `.jpeg`, `.png`, `.webp`).
-2.  Il les analyse une par une avec l'IA.
-3.  Il renomme les fichiers numériquement (`1.jpg`, `2.jpg`...).
-4.  Il crée un fichier CSV (portant le nom du dossier) **à l'intérieur** du dossier photo.
+### Déroulement du traitement
+
+1.  **Contexte** : Le script cherche un fichier `context.txt` ou `instructions.txt` dans le dossier. S'il n'existe pas, il vous demandera si vous souhaitez saisir des instructions manuelles (qui seront alors sauvegardées pour la prochaine fois).
+2.  **Analyse** : Les images sont analysées une par une.
+3.  **Traitement** :
+    *   L'image est renommée et déplacée dans le sous-dossier **`traitees`**.
+    *   Une ligne est ajoutée immédiatement au fichier CSV (créé dans le dossier racine des images).
+4.  **Interruption** : Vous pouvez arrêter le script (Ctrl+C) à tout moment. Pour reprendre, relancez simplement le script sur le même dossier : il ignorera les images déjà dans `traitees` et continuera le travail.
 
 ## Créer un Exécutable (.exe)
 
@@ -62,4 +62,4 @@ Pour utiliser ce programme sur un ordinateur sans Python (Windows), vous pouvez 
     pyinstaller --onefile --name "InventaireIA" main.py
     ```
 3.  Le fichier `InventaireIA.exe` se trouvera dans le dossier `dist`.
-    *   **Attention** : Pour que l'exécutable fonctionne, il doit avoir accès au fichier `.env` (pour la clé API) et au fichier `categories.csv`. Selon la méthode de compilation, ces fichiers devront peut-être être placés dans le même dossier que l'exécutable ou inclus dans le paquet.
+    *   **Attention** : Pour que l'exécutable fonctionne, il doit avoir accès au fichier `.env` (pour la clé API) et au fichier `categories.csv`.
