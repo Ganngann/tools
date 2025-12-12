@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 CSV_SEPARATOR = os.getenv("CSV_SEPARATOR", ",")
+CSV_DECIMAL = os.getenv("CSV_DECIMAL", ".")
 PROCESSED_FOLDER_NAME = "traitees"
 
 def rescan_csv(csv_path):
@@ -29,7 +30,7 @@ def rescan_csv(csv_path):
     if "Remarques" not in df.columns:
         print("Column 'Remarques' missing. Adding it.")
         df["Remarques"] = ""
-        df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+        df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
         print("Added 'Remarques' column. Please fill it with instructions for items you want to rescan, then run this script again.")
         return
 
@@ -103,18 +104,18 @@ def rescan_csv(csv_path):
                  except: pass
 
             if "prix_unitaire_estime" in result:
-                 try: df.at[index, "Prix Unitaire"] = int(float(result["prix_unitaire_estime"]))
+                 try: df.at[index, "Prix Unitaire"] = float(result["prix_unitaire_estime"])
                  except: pass
                  
             if "prix_neuf_estime" in result:
-                 try: df.at[index, "Prix Neuf Estime"] = int(float(result["prix_neuf_estime"]))
+                 try: df.at[index, "Prix Neuf Estime"] = float(result["prix_neuf_estime"])
                  except: pass
 
             # Update Total
             try:
                 qty = float(df.at[index, "Quantite"])
                 pu = float(df.at[index, "Prix Unitaire"])
-                df.at[index, "Prix Total"] = int(qty * pu)
+                df.at[index, "Prix Total"] = qty * pu
             except:
                 pass
 
@@ -126,7 +127,7 @@ def rescan_csv(csv_path):
             
     if updates_count > 0:
         try:
-            df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+            df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
             print(f"\nSuccess! Updated {updates_count} rows in {csv_path}")
         except Exception as e:
             print(f"Error saving CSV: {e}")

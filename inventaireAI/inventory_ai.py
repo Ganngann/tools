@@ -102,8 +102,8 @@ def analyze_image(image_path, categories_context=None, user_hint=None, folder_co
             - "categorie_id": The ID of the category from the provided list.
             - "quantite": The quantity read from the paper/label. If no quantity is visible, estimate it or default to 1. Return as an integer.
             - "etat": The condition of the object. Must be either "Neuf" or "Occasion".
-            - "prix_unitaire_estime": An estimated unit price in Euros based on the object type and condition. Return as an integer (no decimals).
-            - "prix_neuf_estime": An estimated new price in Euros if the object were bought new today. Return as an integer (no decimals).
+            - "prix_unitaire_estime": An estimated unit price in Euros. IMPORTANT: Always use the PRICE AS NEW (replacement value), even if the object is used/broken. Support decimals for small items (e.g. 0.05).
+            - "prix_neuf_estime": Same as above. Return as a number (decimals allowed).
             - "fiabilite": A confidence score (0-100) indicating how reliable this identification and detail extraction is. Return as an integer.
             
             Example output format:
@@ -248,8 +248,8 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             - "categorie_id": The ID of the category from the provided list.
             - "quantite": The quantity of this object type visible or read from label. Return as an integer.
             - "etat": The condition of the objects. Must be either "Neuf" or "Occasion".
-            - "prix_unitaire_estime": An estimated unit price in Euros based on the object type and condition. Return as an integer (no decimals).
-            - "prix_neuf_estime": An estimated new price in Euros if the object were bought new today. Return as an integer (no decimals).
+            - "prix_unitaire_estime": An estimated unit price in Euros. IMPORTANT: Always use the PRICE AS NEW (replacement value). Return as a number (decimals allowed e.g. 0.05).
+            - "prix_neuf_estime": Same as above. Return as a number (decimals allowed).
             - "fiabilite": A confidence score (0-100) indicating how reliable this identification and detail extraction is for this specific object. Return as an integer.
 
             Example output format:

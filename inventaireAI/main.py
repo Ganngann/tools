@@ -25,6 +25,7 @@ COMPRESSION_QUALITY_STEP = int(os.getenv("COMPRESSION_QUALITY_STEP", 10))
 COMPRESSION_MIN_QUALITY = int(os.getenv("COMPRESSION_MIN_QUALITY", 20))
 
 CSV_SEPARATOR = os.getenv("CSV_SEPARATOR", ",")
+CSV_DECIMAL = os.getenv("CSV_DECIMAL", ".") # Decimal separator for floats
 INCLUDE_IMAGE_BASE64 = os.getenv("INCLUDE_IMAGE_BASE64", "True").lower() in ('true', '1', 't')
 
 ADDITIONAL_CSV_COLUMNS = os.getenv("ADDITIONAL_CSV_COLUMNS", "")
@@ -290,7 +291,7 @@ def main():
             print(f"Warning: Could not read existing CSV to determine next ID: {e}")
     else:
         # Create empty DataFrame with columns to write header
-        pd.DataFrame(columns=full_columns).to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+        pd.DataFrame(columns=full_columns).to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
     
     # Preload categories once to pass to analyze_image
     categories_context = load_categories()
@@ -428,15 +429,15 @@ def main():
         # Add to data list
         prix_unitaire = result.get("prix_unitaire_estime", 0)
         try:
-            prix_unitaire = int(float(prix_unitaire)) # Cast to float first in case it's a string with decimals like "2.0"
+            prix_unitaire = float(prix_unitaire)
         except (ValueError, TypeError):
-            prix_unitaire = 0
+            prix_unitaire = 0.0
 
         prix_neuf = result.get("prix_neuf_estime", 0)
         try:
-            prix_neuf = int(float(prix_neuf))
+            prix_neuf = float(prix_neuf)
         except (ValueError, TypeError):
-            prix_neuf = 0
+            prix_neuf = 0.0
 
         quantite_val = result.get("quantite", 0)
         try:
@@ -510,15 +511,15 @@ def main():
                          for col in full_columns:
                              current_df.at[idx, col] = row_df.iloc[0][col]
                          
-                         current_df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+                         current_df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
                          print(f"  Updated CSV row for ID: {obj_id}")
                      else:
                          # Append
-                         row_df.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+                         row_df.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
                          print(f"  Appended CSV row for ID: {obj_id}")
                 else:
                     # Append (CSV empty or no ID col)
-                    row_df.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+                    row_df.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
                     print(f"  Appended CSV row for ID: {obj_id}")
 
             except Exception as e:
