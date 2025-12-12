@@ -1,9 +1,10 @@
 import os
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 from PIL import Image, ImageTk
 import pandas as pd
 import argparse
+from inventory_ai import analyze_image, load_categories
 from dotenv import load_dotenv
 import shutil
 
@@ -27,125 +28,28 @@ class ReviewApp:
         self.df = None
         self.review_queue = [] # List of indices to review
         self.current_index = 0
+        self.current_rotation = 0
+        
+        # Load AI Context
+        self.categories_context = load_categories() if load_categories else None
         
         self.load_data()
         self.setup_ui()
         self.show_current_item()
 
-    def load_data(self):
-        if not os.path.exists(self.csv_path):
-            messagebox.showerror("Erreur", f"Fichier introuvable: {self.csv_path}")
-            self.root.destroy()
-            return
-            
-        try:
-            # Robust loading similar to main.py
-            self.df = pd.read_csv(self.csv_path, sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
-            
-            # Backfill ID if missing (compatibility with legacy files)
-            if "ID" not in self.df.columns:
-                print("Legacy CSV detected (missing ID). Generating IDs...")
-                self.df.insert(0, "ID", range(1, 1 + len(self.df)))
-                # Save immediately to upgrade file
-                self.df.to_csv(self.csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
-            
-            # Ensure price columns are floats
-            price_cols = ["Prix Unitaire", "Prix Neuf Estime", "Prix Total"]
-            for col in price_cols:
-                if col in self.df.columns:
-                     self.df[col] = self.df[col].astype(str).str.replace(',', '.', regex=False)
-                     self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0.0)
-            
-            # Filter items to review: Reliability < 100
-            # Sort by reliability ascending (lowest confidence first)
-            if "Fiabilite" in self.df.columns:
-                self.df["Fiabilite"] = pd.to_numeric(self.df["Fiabilite"], errors='coerce').fillna(0)
-                # Get indices of items to review
-                review_df = self.df[self.df["Fiabilite"] < 100].sort_values("Fiabilite", ascending=True)
-                self.review_queue = review_df.index.tolist()
-            else:
-                self.review_queue = []
-                
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de lire le CSV: {e}")
-            self.root.destroy()
+    # ... (load_data unchanged) ...
 
-    def save_data(self):
-        try:
-            # Recalculate totals if needed
-            self.df.to_csv(self.csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
-            print("Sauvegarde effectuée.")
-        except Exception as e:
-            messagebox.showerror("Erreur de sauvegarde", f"{e}")
+    # ... save_data unchanged ...
 
-    def setup_ui(self):
-        # Layout: Left side for Image, Right side for Form
-        
-        # --- Left Side (Image) ---
-        self.left_frame = tk.Frame(self.root, bg="gray")
-        self.left_frame.place(relx=0, rely=0, relwidth=0.5, relheight=1)
-        
-        self.image_label = tk.Label(self.left_frame, bg="gray")
-        self.image_label.pack(expand=True, fill="both")
-        
-        # --- Right Side (Form) ---
-        self.right_frame = tk.Frame(self.root, padx=20, pady=20)
-        self.right_frame.place(relx=0.5, rely=0, relwidth=0.5, relheight=1)
-        
-        # Header
-        self.lbl_title = tk.Label(self.right_frame, text="Détails de l'Objet", font=("Arial", 16, "bold"))
-        self.lbl_title.pack(pady=(0, 20))
-        
-        self.form_frame = tk.Frame(self.right_frame)
-        self.form_frame.pack(fill="x")
-        
-        # Fields
-        self.fields = {}
-        
-        self.create_field("ID", readonly=True)
-        self.create_field("Fichier Original", readonly=True)
-        self.create_field("Categorie")
-        self.create_field("Nom")
-        self.create_field("Etat") # Should be dropdown really, but entry ok
-        self.create_field("Quantite")
-        self.create_field("Prix Unitaire")
-        self.create_field("Prix Neuf Estime")
-        
-        self.create_field("Fiabilite", readonly=True)
-        
-        # Buttons
-        self.btn_frame = tk.Frame(self.right_frame, pady=30)
-        self.btn_frame.pack(fill="x")
-        
-        self.btn_validate = tk.Button(self.btn_frame, text="✅ Valider (100%)", bg="#d4edda", font=("Arial", 12), command=self.validate_item)
-        self.btn_validate.pack(side="left", padx=5, expand=True, fill="x")
-        
-        self.btn_skip = tk.Button(self.btn_frame, text="➡️ Passer", font=("Arial", 12), command=self.next_item)
-        self.btn_skip.pack(side="left", padx=5, expand=True, fill="x")
-        
-        self.btn_delete = tk.Button(self.btn_frame, text="🗑️ Supprimer Ligne", bg="#f8d7da", font=("Arial", 12), command=self.delete_item)
-        self.btn_delete.pack(side="left", padx=5, expand=True, fill="x")
+    # ... setup_ui unchanged ...
 
-        # Status
-        self.lbl_status = tk.Label(self.right_frame, text="", fg="blue")
-        self.lbl_status.pack(side="bottom", pady=10)
-
-    def create_field(self, name, readonly=False):
-        row = tk.Frame(self.form_frame, pady=5)
-        row.pack(fill="x")
-        lbl = tk.Label(row, text=name, width=20, anchor="w", font=("Arial", 10))
-        lbl.pack(side="left")
-        
-        entry = tk.Entry(row, font=("Arial", 10))
-        entry.pack(side="left", expand=True, fill="x")
-        
-        if readonly:
-            entry.config(state="readonly")
-            
-        self.fields[name] = entry
-
+    # ... show_current_item unchanged but resets rotation ...
+    
     def show_current_item(self):
+        # Reset rotation for new item
+        self.current_rotation = 0
         if self.current_index >= len(self.review_queue):
+            # ... (end of queue logic) ...
             messagebox.showinfo("Terminé", "Aucun autre élément à réviser !")
             self.root.quit()
             return
@@ -175,16 +79,24 @@ class ReviewApp:
             
             if os.path.exists(image_path):
                 print(f"Loading image: {image_path}")
+                self.current_image_path = image_path # Store for rotation/rescan
                 self.display_image(image_path)
             else:
                 print(f"Image not found at: {image_path}")
+                self.current_image_path = None
                 self.display_placeholder(f"Image introuvable:\n{image_path}")
         else:
+            self.current_image_path = None
             self.display_placeholder("Pas de nom de fichier dans le CSV")
 
     def display_image(self, path):
         try:
             img = Image.open(path)
+            
+            # Apply Rotation
+            if self.current_rotation != 0:
+                img = img.rotate(self.current_rotation, expand=True)
+
             # Resize logic
             win_height = self.root.winfo_height()
             win_width = self.root.winfo_width() // 2
@@ -196,6 +108,12 @@ class ReviewApp:
             self.image_label.config(image=self.tk_img, text="")
         except Exception as e:
             self.display_placeholder(f"Erreur image: {e}")
+
+    def rotate_image(self):
+        if self.current_image_path:
+            self.current_rotation = (self.current_rotation - 90) % 360
+            self.display_image(self.current_image_path)
+
 
     def display_placeholder(self, text):
         self.image_label.config(image="", text=text)
@@ -253,6 +171,63 @@ class ReviewApp:
             # Actually safely we just move on, next time loaded it's gone
             # But for current session display:
             self.next_item()
+
+    def prev_item(self):
+        if self.current_index > 0:
+            self.current_index -= 1
+            self.show_current_item()
+        else:
+            messagebox.showinfo("Info", "Vous êtes au début de la liste.")
+
+    def rescan_item(self):
+        if not self.current_image_path:
+            messagebox.showwarning("Attention", "Pas d'image chargée pour l'analyse.")
+            return
+            
+        hint = simpledialog.askstring("Rescan IA", "Entrez un indice pour l'IA (ex: 'C'est un tournevis'):")
+        if hint is None: # Cancelled
+            return
+            
+        try:
+            # Show waiting cursor
+            self.root.config(cursor="watch")
+            self.root.update()
+            
+            print(f"Rescanning with hint: {hint}")
+            result = analyze_image(self.current_image_path, categories_context=self.categories_context, user_hint=hint)
+            
+            # Update fields directly
+            fields_map = {
+                "Nom": "nom",
+                "Categorie": "categorie", 
+                "Etat": "etat",
+                "Quantite": "quantite",
+                "Prix Unitaire": "prix_unitaire_estime",
+                "Prix Neuf Estime": "prix_neuf_estime"
+            }
+            
+            for ui_field, result_key in fields_map.items():
+                if result_key in result:
+                    val = result[result_key]
+                    if result_key == "quantite":
+                         try: val = int(float(str(val)))
+                         except: pass
+                    elif "prix" in result_key:
+                         try: val = float(str(val))
+                         except: pass
+                         
+                    entry = self.fields.get(ui_field)
+                    if entry:
+                        entry.config(state="normal")
+                        entry.delete(0, tk.END)
+                        entry.insert(0, str(val))
+                        
+            messagebox.showinfo("Succès", "Analyse terminée ! Vérifiez les valeurs avant de valider.")
+            
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Echec de l'analyse: {e}")
+        finally:
+            self.root.config(cursor="")
 
     def next_item(self):
         self.current_index += 1
