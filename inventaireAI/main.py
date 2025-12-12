@@ -282,6 +282,14 @@ def main():
     if os.path.exists(csv_path):
         try:
             existing_df = pd.read_csv(csv_path, sep=CSV_SEPARATOR)
+            
+            # Backfill ID if missing (compatibility with legacy files)
+            if "ID" not in existing_df.columns:
+                print("Legacy CSV detected (missing ID). Generating IDs...")
+                existing_df.insert(0, "ID", range(1, 1 + len(existing_df)))
+                # Save immediately to upgrade file
+                existing_df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
+
             if "ID" in existing_df.columns and not existing_df["ID"].empty:
                  # Handle cases where ID might be string or have NaNs
                  ids = pd.to_numeric(existing_df["ID"], errors='coerce').fillna(0).astype(int)

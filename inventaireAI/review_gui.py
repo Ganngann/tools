@@ -42,6 +42,13 @@ class ReviewApp:
             # Robust loading similar to main.py
             self.df = pd.read_csv(self.csv_path, sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
             
+            # Backfill ID if missing (compatibility with legacy files)
+            if "ID" not in self.df.columns:
+                print("Legacy CSV detected (missing ID). Generating IDs...")
+                self.df.insert(0, "ID", range(1, 1 + len(self.df)))
+                # Save immediately to upgrade file
+                self.df.to_csv(self.csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
+            
             # Ensure price columns are floats
             price_cols = ["Prix Unitaire", "Prix Neuf Estime", "Prix Total"]
             for col in price_cols:

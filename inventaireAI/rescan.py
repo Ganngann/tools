@@ -23,8 +23,14 @@ def rescan_csv(csv_path):
         try:
              df = pd.read_csv(csv_path, sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
         except Exception as e2:
-             print(f"Error reading CSV: {e2}")
              return
+    
+    # Backfill ID if missing (compatibility with legacy files)
+    if "ID" not in df.columns:
+        print("Legacy CSV detected (missing ID). Generating IDs...")
+        df.insert(0, "ID", range(1, 1 + len(df)))
+        # Save immediately to upgrade file structure
+        df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
     
     # Ensure price columns are floats
     price_cols = ["Prix Unitaire", "Prix Neuf Estime", "Prix Total"]
