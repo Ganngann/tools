@@ -21,18 +21,35 @@ def rescan_csv(csv_path):
     except Exception as e:
         # Retry without dtype if it fails (e.g. empty file or bad format)
         try:
-             df = pd.read_csv(csv_path, sep=CSV_SEPARATOR)
+             df = pd.read_csv(csv_path, sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
         except Exception as e2:
              print(f"Error reading CSV: {e2}")
              return
+    
+    # Ensure price columns are floats
+    price_cols = ["Prix Unitaire", "Prix Neuf Estime", "Prix Total"]
+    for col in price_cols:
+         if col in df.columns:
+             df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
+             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
 
-    # Backward compatibility: Add Remarques if missing
+    # Backward compatibility: Add columns if missing.
+    columns_added = False
     if "Remarques" not in df.columns:
         print("Column 'Remarques' missing. Adding it.")
         df["Remarques"] = ""
-        df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
-        print("Added 'Remarques' column. Please fill it with instructions for items you want to rescan, then run this script again.")
-        return
+        columns_added = True
+    
+    if "Remarques traitées" not in df.columns:
+        print("Column 'Remarques traitées' missing. Adding it.")
+        df["Remarques traitées"] = ""
+        columns_added = True
+
+    # Save immediately if we added columns to ensure structure is correct
+    if columns_added:
+         df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
+         print("Added missing columns. Please fill 'Remarques' with instructions for items you want to rescan, then run this script again.")
+         return
 
     # Check required columns
     required_cols = ["ID", "Fichier Original"]
@@ -118,6 +135,13 @@ def rescan_csv(csv_path):
                 df.at[index, "Prix Total"] = qty * pu
             except:
                 pass
+
+            # Move remark to processed
+            current_processed = str(df.at[index, "Remarques traitées"]) if pd.notna(df.at[index, "Remarques traitées"]) else ""
+            if current_processed:
+                current_processed += " | "
+            df.at[index, "Remarques traitées"] = current_processed + remarks
+            df.at[index, "Remarques"] = "" # Clear pending remark
 
             print(f"  Updated: {result.get('nom', 'Unknown')}")
             updates_count += 1

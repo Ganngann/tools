@@ -266,7 +266,7 @@ def main():
     desired_known_order = [
          "ID", "Fichier Original", "Image", "Categorie", "Categorie ID", "Fiabilite",
          "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
-         "Nom", "Etat", "Quantite", "Remarques"
+         "Nom", "Etat", "Quantite", "Remarques", "Remarques traitées"
     ]
     custom_cols = []
     if ADDITIONAL_CSV_COLUMNS:
@@ -458,7 +458,9 @@ def main():
             "Etat": result.get("etat", "Inconnu"),
             "Prix Unitaire": prix_unitaire,
             "Prix Neuf Estime": prix_neuf,
-            "Prix Total": prix_total
+            "Prix Total": prix_total,
+            "Remarques": "",
+            "Remarques traitées": ""
         }
         if INCLUDE_IMAGE_BASE64:
             row["Image"] = image_base64
@@ -479,7 +481,15 @@ def main():
                 if os.path.exists(csv_path):
                      # Read all columns as string to avoid type issues, then convert specific ones?
                      # Or just rely on standard pandas inference.
-                     current_df = pd.read_csv(csv_path, sep=CSV_SEPARATOR)
+                     current_df = pd.read_csv(csv_path, sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
+                     
+                     # Ensure price columns are floats (handling migration from dot to comma or vice versa)
+                     price_cols = ["Prix Unitaire", "Prix Neuf Estime", "Prix Total"]
+                     for col in price_cols:
+                         if col in current_df.columns:
+                             # Convert to string, replace comma with dot (universal float), then to numeric
+                             current_df[col] = current_df[col].astype(str).str.replace(',', '.', regex=False)
+                             current_df[col] = pd.to_numeric(current_df[col], errors='coerce').fillna(0.0)
                      
                      # Ensure all desired columns exist in the loaded CSV (backward compatibility)
                      for col in full_columns:
@@ -494,7 +504,7 @@ def main():
                 # Ensure correct column order
                 row_df = row_df[full_columns]
 
-                if not current_df.empty and "ID" in current_df.columns:
+                if "ID" in current_df.columns:
                      # Check if ID exists
                      # Ensure ID column types match (int)
                      current_df["ID"] = pd.to_numeric(current_df["ID"], errors='coerce').fillna(-1).astype(int)
@@ -514,11 +524,17 @@ def main():
                          current_df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
                          print(f"  Updated CSV row for ID: {obj_id}")
                      else:
-                         # Append
-                         row_df.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
+                         # Append new row
+                         # Reindex row_df to match current_df columns (handling impromptu columns)
+                         # Fill missing columns (the impromptu ones) with empty string
+                         row_df = row_df.reindex(columns=current_df.columns, fill_value="")
+                         
+                         current_df = pd.concat([current_df, row_df], ignore_index=True)
+                         
+                         current_df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
                          print(f"  Appended CSV row for ID: {obj_id}")
                 else:
-                    # Append (CSV empty or no ID col)
+                    # Append (CSV empty or no ID col). This creates the file.
                     row_df.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
                     print(f"  Appended CSV row for ID: {obj_id}")
 
