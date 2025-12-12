@@ -33,6 +33,7 @@ ADDITIONAL_CSV_COLUMNS = os.getenv("ADDITIONAL_CSV_COLUMNS", "")
 RELIABILITY_THRESHOLD = int(os.getenv("RELIABILITY_THRESHOLD", 85))
 LOW_CONFIDENCE_ACTION = os.getenv("LOW_CONFIDENCE_ACTION", "move") # 'move' or 'ask'
 MANUAL_REVIEW_FOLDER_NAME = os.getenv("MANUAL_REVIEW_FOLDER", "manual_review")
+PROCESSED_FOLDER_NAME = "traitees"
 
 def sanitize_filename(name):
     # Remove invalid characters for Windows/Linux filenames
@@ -226,8 +227,32 @@ def main():
         return
 
     print(f"Found {len(images)} images. Starting processing...")
+    
+    # CSV name based on folder name
+    folder_name = os.path.basename(os.path.normpath(folder_path))
+    csv_filename = f"{folder_name}.csv"
+    csv_path = os.path.join(folder_path, csv_filename) # Save inside folder
+    
+    # Prepare CSV headers if file doesn't exist
+    desired_known_order = [
+         "ID", "Fichier Original", "Image", "Categorie", "Categorie ID", "Fiabilite",
+         "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
+         "Nom", "Etat", "Quantite"
+    ]
+    custom_cols = []
+    if ADDITIONAL_CSV_COLUMNS:
+        custom_cols = [col.strip() for col in ADDITIONAL_CSV_COLUMNS.split(',') if col.strip()]
 
-    data = []
+    # We need to determine the full header order to write the header
+    # But 'Image' column is conditional.
+    current_desired_order = [c for c in desired_known_order if c != "Image" or INCLUDE_IMAGE_BASE64]
+    full_columns = current_desired_order + custom_cols
+
+    if not os.path.exists(csv_path):
+        # Create empty DataFrame with columns to write header
+        pd.DataFrame(columns=full_columns).to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+    
+    # data = [] # No longer needed for batch save
     
     # Preload categories once to pass to analyze_image
     categories_context = load_categories()
@@ -322,11 +347,21 @@ def main():
         proposed_filename = f"{quantite}_{sanitized_name}{ext}"
 
         if proposed_filename != filename:
-            new_path = get_unique_filepath(folder_path, proposed_filename)
+            # Create processed folder
+            processed_dir = os.path.join(folder_path, PROCESSED_FOLDER_NAME)
+            if not os.path.exists(processed_dir):
+                os.makedirs(processed_dir)
+
+            new_path = get_unique_filepath(processed_dir, proposed_filename)
             new_filename = os.path.basename(new_path)
         else:
-            new_path = original_path
-            new_filename = filename
+             # Even if name is same, move to processed folder
+            processed_dir = os.path.join(folder_path, PROCESSED_FOLDER_NAME)
+            if not os.path.exists(processed_dir):
+                os.makedirs(processed_dir)
+            
+            new_path = get_unique_filepath(processed_dir, filename)
+            new_filename = os.path.basename(new_path)
 
         # Convert image to base64
         image_base64 = ""
@@ -369,55 +404,31 @@ def main():
         }
         if INCLUDE_IMAGE_BASE64:
             row["Image"] = image_base64
-        data.append(row)
+        # data.append(row)
 
-        # Rename and compress file if needed
+        # Rename and compress file if needed (this moves it to processed_dir)
         try:
             compress_image_to_target(original_path, new_path)
             if original_path != new_path:
-                print(f"  Processed and renamed to: {new_filename}")
+                 print(f"  Processed and moved to: {PROCESSED_FOLDER_NAME}/{new_filename}")
             else:
                  print(f"  Processed file: {new_filename}")
+            
+            # Save row to CSV ONLY if move was successful (implicit by reaching here)
+            df_row = pd.DataFrame([row])
+            
+            # Add empty columns if configured
+            for col in custom_cols:
+                df_row[col] = ""
+
+            # Reorder columns
+            df_row = df_row[full_columns]
+            
+            df_row.to_csv(csv_path, mode='a', header=False, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+
         except Exception as e:
             print(f"  Warning: Could not process {filename} to {new_filename}: {e}")
         
-    # Create DataFrame and save to CSV
-    df = pd.DataFrame(data)
-    
-    # Add empty columns if configured
-    if ADDITIONAL_CSV_COLUMNS:
-        additional_cols = [col.strip() for col in ADDITIONAL_CSV_COLUMNS.split(',') if col.strip()]
-        for col in additional_cols:
-            df[col] = ""
-
-    # Reorder columns: [Standard Cols except Nom, Etat, Quantite], Nom, Etat, Quantite, [Custom Cols]
-    cols = df.columns.tolist()
-    desired_known_order = [
-        "ID", "Fichier Original", "Image", "Categorie", "Categorie ID", "Fiabilite",
-        "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
-        "Nom", "Etat", "Quantite"
-    ]
-
-    available_known_cols = [c for c in desired_known_order if c in cols]
-    custom_cols = [c for c in cols if c not in desired_known_order]
-
-    final_order = available_known_cols + custom_cols
-    df = df[final_order]
-
-    # CSV name based on folder name
-    folder_name = os.path.basename(os.path.normpath(folder_path))
-    csv_filename = f"{folder_name}.csv"
-    csv_path = os.path.join(folder_path, csv_filename) # Save inside folder or outside? 
-    # User said: "encoder le tout dans un csv qui portera le meme nom que le dossier photo"
-    # Usually better outside to avoid listing it as a file next time, but user might want it inside.
-    # Let's save it INSIDE for now as it's related to the content, or maybe OUTSIDE?
-    # "un csv qui portera le meme nom que le dossier photo" -> implies the file itself.
-    # Let's save it in the parent directory of the folder to keep the folder just for images?
-    # Or inside. Let's put it inside for self-containment, but filter it out in the loop (we already filter by extension).
-    
-    # Actually, if I rename files inside the loop, and the loop iterates over `images` list which is pre-fetched, it should be fine.
-    
-    df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
     print(f"\nDone! Inventory saved to {csv_path}")
 
 if __name__ == "__main__":
