@@ -265,7 +265,7 @@ def main():
     desired_known_order = [
          "ID", "Fichier Original", "Image", "Categorie", "Categorie ID", "Fiabilite",
          "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
-         "Nom", "Etat", "Quantite"
+         "Nom", "Etat", "Quantite", "Remarques"
     ]
     custom_cols = []
     if ADDITIONAL_CSV_COLUMNS:
@@ -479,6 +479,11 @@ def main():
                      # Read all columns as string to avoid type issues, then convert specific ones?
                      # Or just rely on standard pandas inference.
                      current_df = pd.read_csv(csv_path, sep=CSV_SEPARATOR)
+                     
+                     # Ensure all desired columns exist in the loaded CSV (backward compatibility)
+                     for col in full_columns:
+                         if col not in current_df.columns:
+                             current_df[col] = ""
                 
                 # Create DataFrame for current row
                 row_df = pd.DataFrame([row])
