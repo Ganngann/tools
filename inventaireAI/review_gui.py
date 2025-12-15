@@ -37,13 +37,130 @@ class ReviewApp:
         self.setup_ui()
         self.show_current_item()
 
-    # ... (load_data unchanged) ...
+    def load_data(self):
+        if not os.path.exists(self.csv_path):
+            messagebox.showerror("Erreur", f"Fichier introuvable: {self.csv_path}")
+            self.root.destroy()
+            return
+            
+        try:
+            # Robust loading similar to main.py
+            self.df = pd.read_csv(self.csv_path, sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
+            
+            # Backfill ID if missing (compatibility with legacy files)
+            if "ID" not in self.df.columns:
+                print("Legacy CSV detected (missing ID). Generating IDs...")
+                self.df.insert(0, "ID", range(1, 1 + len(self.df)))
+                # Save immediately to upgrade file
+                self.df.to_csv(self.csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
+            
+            # Ensure price columns are floats
+            price_cols = ["Prix Unitaire", "Prix Neuf Estime", "Prix Total"]
+            for col in price_cols:
+                if col in self.df.columns:
+                     self.df[col] = self.df[col].astype(str).str.replace(',', '.', regex=False)
+                     self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0.0)
+            
+            # Filter items to review: Reliability < 100
+            # Sort by reliability ascending (lowest confidence first)
+            if "Fiabilite" in self.df.columns:
+                self.df["Fiabilite"] = pd.to_numeric(self.df["Fiabilite"], errors='coerce').fillna(0)
+                # Get indices of items to review
+                review_df = self.df[self.df["Fiabilite"] < 100].sort_values("Fiabilite", ascending=True)
+                self.review_queue = review_df.index.tolist()
+            else:
+                self.review_queue = []
+                
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de lire le CSV: {e}")
+            self.root.destroy()
 
-    # ... save_data unchanged ...
+    def save_data(self):
+        try:
+            # Recalculate totals if needed
+            self.df.to_csv(self.csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
+            print("Sauvegarde effectuée.")
+        except Exception as e:
+            messagebox.showerror("Erreur de sauvegarde", f"{e}")
 
-    # ... setup_ui unchanged ...
+    def setup_ui(self):
+        # Layout: Left side for Image, Right side for Form
+        
+        # --- Left Side (Image) ---
+        self.left_frame = tk.Frame(self.root, bg="gray")
+        self.left_frame.place(relx=0, rely=0, relwidth=0.5, relheight=1)
+        
+        self.image_label = tk.Label(self.left_frame, bg="gray")
+        self.image_label.pack(expand=True, fill="both")
+        
+        # --- Right Side (Form) ---
+        self.right_frame = tk.Frame(self.root, padx=20, pady=20)
+        self.right_frame.place(relx=0.5, rely=0, relwidth=0.5, relheight=1)
+        
+        # Header
+        self.lbl_title = tk.Label(self.right_frame, text="Détails de l'Objet", font=("Arial", 16, "bold"))
+        self.lbl_title.pack(pady=(0, 20))
+        
+        # Rotation and Rescan Toolbar inside right frame
+        self.tools_frame = tk.Frame(self.right_frame, pady=5)
+        self.tools_frame.pack(fill="x")
+        
+        self.btn_rotate = tk.Button(self.tools_frame, text="🔄 Pivoter", command=self.rotate_image)
+        self.btn_rotate.pack(side="left", padx=5)
+        
+        self.btn_rescan = tk.Button(self.tools_frame, text="🧠 Rescan (Indices)", bg="#e2e6ea", command=self.rescan_item)
+        self.btn_rescan.pack(side="left", padx=5)
+        
+        self.form_frame = tk.Frame(self.right_frame)
+        self.form_frame.pack(fill="x")
+        
+        # Fields
+        self.fields = {}
+        
+        self.create_field("ID", readonly=True)
+        self.create_field("Fichier Original", readonly=True)
+        self.create_field("Categorie")
+        self.create_field("Nom")
+        self.create_field("Etat") # Should be dropdown really, but entry ok
+        self.create_field("Quantite")
+        self.create_field("Prix Unitaire")
+        self.create_field("Prix Neuf Estime")
+        
+        self.create_field("Fiabilite", readonly=True)
+        
+        # Buttons
+        self.btn_frame = tk.Frame(self.right_frame, pady=30)
+        self.btn_frame.pack(fill="x")
+        
+        self.btn_validate = tk.Button(self.btn_frame, text="✅ Valider (100%)", bg="#d4edda", font=("Arial", 12), command=self.validate_item)
+        self.btn_validate.pack(side="left", padx=5, expand=True, fill="x")
+        
+        self.btn_prev = tk.Button(self.btn_frame, text="⬅️ Précédent", font=("Arial", 12), command=self.prev_item)
+        self.btn_prev.pack(side="left", padx=5, expand=True, fill="x")
 
-    # ... show_current_item unchanged but resets rotation ...
+        self.btn_skip = tk.Button(self.btn_frame, text="➡️ Suivant", font=("Arial", 12), command=self.next_item)
+        self.btn_skip.pack(side="left", padx=5, expand=True, fill="x")
+        
+        self.btn_delete = tk.Button(self.btn_frame, text="🗑️ Supprimer Ligne", bg="#f8d7da", font=("Arial", 12), command=self.delete_item)
+        self.btn_delete.pack(side="left", padx=5, expand=True, fill="x")
+
+        # Status
+        self.lbl_status = tk.Label(self.right_frame, text="", fg="blue")
+        self.lbl_status.pack(side="bottom", pady=10)
+
+    def create_field(self, name, readonly=False):
+        row = tk.Frame(self.form_frame, pady=5)
+        row.pack(fill="x")
+        lbl = tk.Label(row, text=name, width=20, anchor="w", font=("Arial", 10))
+        lbl.pack(side="left")
+        
+        entry = tk.Entry(row, font=("Arial", 10))
+        entry.pack(side="left", expand=True, fill="x")
+        
+        if readonly:
+            entry.config(state="readonly")
+            
+        self.fields[name] = entry
     
     def show_current_item(self):
         # Reset rotation for new item
@@ -93,15 +210,9 @@ class ReviewApp:
         try:
             img = Image.open(path)
             
-            # Apply Rotation
-            if self.current_rotation != 0:
-                img = img.rotate(self.current_rotation, expand=True)
-
-            # Resize logic
+            # Simple maintaining aspect ratio
             win_height = self.root.winfo_height()
             win_width = self.root.winfo_width() // 2
-            
-            # Simple maintaining aspect ratio
             img.thumbnail((win_width, win_height))
             
             self.tk_img = ImageTk.PhotoImage(img)
@@ -110,9 +221,18 @@ class ReviewApp:
             self.display_placeholder(f"Erreur image: {e}")
 
     def rotate_image(self):
-        if self.current_image_path:
-            self.current_rotation = (self.current_rotation - 90) % 360
-            self.display_image(self.current_image_path)
+        if self.current_image_path and os.path.exists(self.current_image_path):
+            try:
+                img = Image.open(self.current_image_path)
+                # Rotate 90 degrees counter-clockwise
+                img = img.rotate(90, expand=True)
+                img.save(self.current_image_path)
+                
+                # Refresh display
+                self.display_image(self.current_image_path)
+                print(f"Image rotated immediately: {self.current_image_path}")
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Impossible de pivoter l'image: {e}")
 
 
     def display_placeholder(self, text):
