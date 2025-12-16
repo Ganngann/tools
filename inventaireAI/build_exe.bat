@@ -19,7 +19,11 @@ if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 if exist *.spec del *.spec
 
-:: 3. Lancer la construction
+:: 3. Mettre a jour la date de build
+echo [INFO] Mise a jour de la date dans version_info.py...
+python -c "import datetime; d = datetime.datetime.now().strftime('%%Y-%%m-%%d'); lines = open('version_info.py').readlines(); open('version_info.py', 'w').writelines([l if not l.startswith('BUILD_DATE') else f'BUILD_DATE = \"{d}\"\n' for l in lines]); print(f'Build date updated to {d}')"
+
+:: 4. Lancer la construction
 echo [INFO] Generation de l'executable...
 :: --onefile : Un seul fichier .exe
 :: --windowed : Pas de fenetre noire de console

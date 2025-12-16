@@ -13,13 +13,19 @@ from counter import process_inventory
 from review_gui import ReviewApp
 from ui_utils import ToolTip
 
+from version_info import VERSION, BUILD_DATE
+from update_checker import check_for_updates_thread
+
 class LauncherApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Inventaire AI - Launcher")
+        self.root.title(f"Inventaire AI - Launcher v{VERSION}")
         self.root.geometry("600x550")
         self.root.minsize(450, 500)
         self.root.configure(bg="#f0f2f5")
+        
+        # Check updates
+        check_for_updates_thread(self.on_update_result)
         
         # Style
         self.style = ttk.Style()
@@ -87,8 +93,20 @@ class LauncherApp:
         # Footer
         footer_frame = tk.Frame(root, bg="#f0f2f5", pady=10)
         footer_frame.pack(side="bottom", fill="x")
-        lbl_ver = tk.Label(footer_frame, text="v1.1 - Régie des Quartiers", bg="#f0f2f5", fg="#999")
-        lbl_ver.pack()
+        
+        self.lbl_ver = tk.Label(footer_frame, text=f"v{VERSION} ({BUILD_DATE}) - Régie des Quartiers", bg="#f0f2f5", fg="#999")
+        self.lbl_ver.pack()
+
+    def on_update_result(self, result):
+        has_update, new_ver, error = result
+        if has_update:
+            self.root.after(0, lambda: self.show_update_notification(new_ver))
+            
+    def show_update_notification(self, new_ver):
+        msg = f"Une nouvelle version (v{new_ver}) est disponible !\nVeuillez mettre à jour l'application."
+        self.lbl_ver.config(text=msg, fg="red", font=("Arial", 10, "bold"))
+        messagebox.showinfo("Mise à jour disponible", msg)
+
 
     def start_new_inventory(self):
         folder_selected = filedialog.askdirectory(title="Sélectionner le dossier contenant les photos")
