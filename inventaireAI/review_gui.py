@@ -128,7 +128,7 @@ class ReviewApp:
         self.lbl_title.pack(pady=(0, 20))
         
         # Rotation and Rescan Toolbar inside right frame
-        self.tools_frame = tk.LabelFrame(self.right_frame, text="Outils & Corrections", padding=10)
+        self.tools_frame = tk.LabelFrame(self.right_frame, text="Outils & Corrections", padx=10, pady=10)
         self.tools_frame.pack(fill="x", pady=(0, 15))
         
         self.btn_rotate = tk.Button(self.tools_frame, text="🔄 Pivoter", command=self.rotate_image)

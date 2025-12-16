@@ -23,6 +23,13 @@ if exist *.spec del *.spec
 echo [INFO] Mise a jour de la date dans version_info.py...
 python -c "import datetime; d = datetime.datetime.now().strftime('%%Y-%%m-%%d'); lines = open('version_info.py').readlines(); open('version_info.py', 'w').writelines([l if not l.startswith('BUILD_DATE') else f'BUILD_DATE = \"{d}\"\n' for l in lines]); print(f'Build date updated to {d}')"
 
+:: 3a. Mettre a jour la version dans le code
+python -c "import json; v = json.load(open('version_info.json'))['version']; lines = open('version_info.py').readlines(); open('version_info.py', 'w').writelines([l if not l.startswith('VERSION') else f'VERSION = \"{v}\"\n' for l in lines]); print(f'Version updated to {v}')"
+
+:: 3b. Recuperer la version
+for /f "delims=" %%i in ('python -c "import json; print(json.load(open('version_info.json'))['version'])"') do set APP_VERSION=%%i
+echo [INFO] Version detectee : %APP_VERSION%
+
 :: 4. Lancer la construction
 echo [INFO] Generation de l'executable...
 :: --onefile : Un seul fichier .exe
@@ -30,7 +37,7 @@ echo [INFO] Generation de l'executable...
 :: --name : Nom de l'exe
 :: --hidden-import : Force l'inclusion de depedances cachees
 echo.
-pyinstaller --noconfirm --onefile --windowed --name "InventaireAI" ^
+pyinstaller --noconfirm --onefile --windowed --name "InventaireAI_v%APP_VERSION%" ^
     --hidden-import=pandas ^
     --hidden-import=PIL ^
     --hidden-import=tkinter ^
