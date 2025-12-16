@@ -7,6 +7,7 @@ import argparse
 from inventory_ai import analyze_image, analyze_image_multiple, load_categories
 from dotenv import load_dotenv
 import shutil
+from ui_utils import ToolTip
 
 # Load environment variables
 load_dotenv()
@@ -120,12 +121,15 @@ class ReviewApp:
         
         self.btn_rotate = tk.Button(self.tools_frame, text="🔄 Pivoter", command=self.rotate_image)
         self.btn_rotate.pack(side="left", padx=5)
+        ToolTip(self.btn_rotate, "Pivoter l'image de 90° vers la gauche.")
         
         self.btn_rescan = tk.Button(self.tools_frame, text="🧠 Rescan (Indices)", bg="#e2e6ea", command=self.rescan_item)
         self.btn_rescan.pack(side="left", padx=5)
+        ToolTip(self.btn_rescan, "Relancer l'IA sur cette image.\nVous pourrez donner un indice (ex: 'C'est un vase') pour aider l'IA.")
 
         self.btn_multi = tk.Button(self.tools_frame, text="🔢 Scan Multi", bg="#e2e6ea", command=self.scan_multi_item)
         self.btn_multi.pack(side="left", padx=5)
+        ToolTip(self.btn_multi, "Utiliser si l'image contient PLUSIEURS objets.\nL'IA essaiera de les séparer en plusieurs lignes d'inventaire.")
         
         self.form_frame = tk.Frame(self.right_frame)
         self.form_frame.pack(fill="x")
@@ -151,12 +155,15 @@ class ReviewApp:
         
         self.btn_validate = tk.Button(self.btn_frame, text="✅ Valider (100%)", bg="#d4edda", font=("Arial", 12), command=self.validate_item)
         self.btn_validate.pack(side="left", padx=5, expand=True, fill="x")
+        ToolTip(self.btn_validate, "Confirmer que les infos sont correctes.\nMet la fiabilité à 100% et passe au suivant.")
 
         self.btn_comment = tk.Button(self.btn_frame, text="💬 Commenter & Passer", bg="#fff3cd", font=("Arial", 12), command=self.comment_and_skip_item)
         self.btn_comment.pack(side="left", padx=5, expand=True, fill="x")
+        ToolTip(self.btn_comment, "Sauvegarder un commentaire sans valider totalement.\nUtile si vous avez un doute.")
 
         self.btn_retake = tk.Button(self.btn_frame, text="📸 À Refaire", bg="#f5c6cb", font=("Arial", 12), command=self.mark_as_retake)
         self.btn_retake.pack(side="left", padx=5, expand=True, fill="x")
+        ToolTip(self.btn_retake, "Photo ratée ?\nDéplace l'image dans le dossier 'a_refaire' et la retire de la liste.")
         
         self.btn_prev = tk.Button(self.btn_frame, text="⬅️ Précédent", font=("Arial", 12), command=self.prev_item)
         self.btn_prev.pack(side="left", padx=5, expand=True, fill="x")
@@ -166,6 +173,7 @@ class ReviewApp:
         
         self.btn_delete = tk.Button(self.btn_frame, text="🗑️ Supprimer Ligne", bg="#f8d7da", font=("Arial", 12), command=self.delete_item)
         self.btn_delete.pack(side="left", padx=5, expand=True, fill="x")
+        ToolTip(self.btn_delete, "Supprimer définitivement cet objet de l'inventaire.")
 
         # Status
         self.lbl_status = tk.Label(self.right_frame, text="", fg="blue")

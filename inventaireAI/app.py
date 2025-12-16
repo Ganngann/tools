@@ -40,11 +40,15 @@ class LauncherApp:
         btn_frame = tk.Frame(root, bg="#f0f2f5", pady=20)
         btn_frame.pack(expand=True)
 
+from ui_utils import ToolTip
+
         self.btn_scan = ttk.Button(btn_frame, text="🆕 Nouvel Inventaire\n(Scanner des photos)", style="Big.TButton", command=self.start_new_inventory)
         self.btn_scan.pack(fill="x", pady=10, ipadx=50)
+        ToolTip(self.btn_scan, "Sélectionnez un dossier de photos.\nL'IA analysera chaque image pour créer un fichier Excel (CSV).")
 
         self.btn_review = ttk.Button(btn_frame, text="🛠️ Réviser / Corriger\n(Ouvrir un CSV)", style="Big.TButton", command=self.start_review)
         self.btn_review.pack(fill="x", pady=10, ipadx=50)
+        ToolTip(self.btn_review, "Ouvrez un fichier CSV existant pour :\n- Corriger les erreurs de l'IA\n- Ajouter des prix\n- Valider l'inventaire")
         
         # Footer
         footer_frame = tk.Frame(root, bg="#f0f2f5", pady=10)
