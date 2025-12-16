@@ -68,6 +68,22 @@ class LauncherApp:
         )
         lbl_expl.pack(fill="x", pady=(0, 10), padx=10)
 
+        # Cost Disclaimer
+        disclaimer_text = (
+            "ℹ️ Note : Le coût est d'environ 0,001 € par photo (soit 1 € pour 1000 photos).\n"
+            "   L'outil est libre d'utilisation, mais n'est pas conçu pour traiter\n"
+            "   des volumes massifs (ex: 1 million de photos)."
+        )
+        lbl_disclaimer = tk.Label(
+            header_frame,
+            text=disclaimer_text,
+            bg="#f0f2f5",
+            fg="#666",
+            justify="center",
+            font=("Arial", 9, "italic")
+        )
+        lbl_disclaimer.pack(fill="x", pady=(0, 10))
+
         # Buttons Frame
         btn_frame = tk.Frame(root, bg="#f0f2f5", pady=10)
         btn_frame.pack(expand=True, fill="x", padx=40)
@@ -120,6 +136,9 @@ class LauncherApp:
         self.popup.transient(self.root)
         self.popup.grab_set()
         
+        self.stop_event = threading.Event()
+        self.popup.protocol("WM_DELETE_WINDOW", self.on_cancel_scan)
+        
         lbl = tk.Label(self.popup, text="Analyse des images par l'IA...\nVeuillez patienter.", pady=10, font=("Arial", 11))
         lbl.pack()
         
@@ -133,11 +152,17 @@ class LauncherApp:
         # Run in thread
         threading.Thread(target=self.run_process_inventory, args=(folder_selected,), daemon=True).start()
 
+    def on_cancel_scan(self):
+        if messagebox.askyesno("Annuler", "Voulez-vous vraiment arrêter le scan en cours ?"):
+            self.stop_event.set()
+            self.popup.destroy()
+
     def run_process_inventory(self, folder_path):
         try:
-            csv_path = process_inventory(folder_path, progress_callback=self.update_progress)
+            csv_path = process_inventory(folder_path, progress_callback=self.update_progress, stop_event=self.stop_event)
             
-            self.root.after(0, lambda: self.finish_inventory(csv_path))
+            if not self.stop_event.is_set():
+                self.root.after(0, lambda: self.finish_inventory(csv_path))
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Erreur", f"Une erreur est survenue:\n{e}"))
             self.root.after(0, self.popup.destroy)

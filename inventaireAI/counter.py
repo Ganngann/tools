@@ -137,7 +137,7 @@ def compress_image_to_target(source_path, dest_path, max_size_kb=None):
 
 
 
-def process_inventory(input_path, target_element=None, progress_callback=None):
+def process_inventory(input_path, target_element=None, progress_callback=None, stop_event=None):
     valid_extensions = ('.jpg', '.jpeg', '.png', '.webp')
 
     # Determine mode: Folder, Zip, or Single File
@@ -328,6 +328,11 @@ def process_inventory(input_path, target_element=None, progress_callback=None):
     total_rows = len(df)
     
     for index, row in df.iterrows():
+        # Check for cancellation
+        if stop_event and stop_event.is_set():
+            print("Process cancelled by user.")
+            break
+
         filename = str(row.get("Fichier", ""))
         if not filename: continue
         
