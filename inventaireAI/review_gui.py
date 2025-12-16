@@ -281,6 +281,39 @@ class ReviewApp:
             
         self.fields[name] = entry
 
+    def _get_reliability_color(self, val):
+        try:
+            score = float(val)
+        except:
+            return "white"
+            
+        # Range: 0-100
+        # < 50: Red (#ffcccc)
+        # 50-90: Orange/Yellow gradient
+        # > 90: Green (#ccffcc)
+        
+        if score < 50:
+            return "#ffcccc" # Light Red
+        elif score >= 90:
+            return "#ccffcc" # Light Green
+        else:
+            # Gradient between 50 and 90
+            # 50 -> Red/Orange
+            # 70 -> Yellow
+            # 90 -> Greenish
+            
+            # Simple approach: 
+            # 50-70: Red fading out, Green fading in
+            if score < 70:
+                # Orange zone
+                return "#ffeeba" # Light Orange/Yellow
+            else:
+                 # Yellow-Green zone
+                return "#e2e6ea" # Neutral/Light Grey? No, user wants gradient.
+                # Let's use a fixed set for simplicity and readability
+                # > 70 is decent.
+                return "#d4edda" # Pale Green (Bootstrap success) but not full green
+
     def show_current_item(self):
         # Reset rotation for new item
         self.current_rotation = 0
@@ -315,6 +348,10 @@ class ReviewApp:
                 
             if field in ["ID", "Fichier", "Fichier Original", "Fiabilite"]:
                 entry.config(state="readonly")
+                
+            if field == "Fiabilite":
+                color = self._get_reliability_color(val)
+                entry.config(bg=color, readonlybackground=color)
 
         # Load Image
         filename = row.get("Fichier Original", "")

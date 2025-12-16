@@ -54,9 +54,9 @@ class LauncherApp:
         
         # Steps
         steps = [
-            ("1. SCAN", "Cliquez sur 'Nouvel Inventaire'. Sélectionnez le dossier de photos.\nL'IA va identifier les objets et créer un fichier CSV."),
-            ("2. VERIFICATION", "Ouvrez le fichier CSV généré avec 'Réviser / Corriger'.\nVérifiez les noms, etc."),
-            ("3. CORRECTION", "Si une photo est mal cadrée ou contient plusieurs objets :\nUtilisez le bouton 'À Refaire'. L'image sera déplacée pour être reprise.")
+            ("1. SCAN", "Cliquez sur 'Nouvel Inventaire'. Sélectionnez votre dossier.\n L'IA identifie les objets (plusieurs par photo possibles si bien visibles).\n Si vous ajoutez des photos, relancez simplement le scan : seules les nouvelles seront ajoutées."),
+            ("2. VERIFICATION", "Ouvrez le fichier CSV généré avec 'Réviser / Corriger'.\n Les résultats sont triés par 'Fiabilité' croissante : l'IA vous montre en premier\n les éléments les plus difficiles à identifier pour faciliter votre contrôle."),
+            ("3. CORRECTION", "Si une photo est mal cadrée, floue ou contient plusieurs objets :\nUtilisez le bouton 'À Refaire'. L'image sera déplacée dans le dossier 'a_refaire'\npour que vous puissiez la reprendre proprement.")
         ]
         
         for title, desc in steps:
