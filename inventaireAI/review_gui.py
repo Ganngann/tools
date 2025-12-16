@@ -14,6 +14,7 @@ load_dotenv()
 CSV_SEPARATOR = os.getenv("CSV_SEPARATOR", ",")
 CSV_DECIMAL = os.getenv("CSV_DECIMAL", ".")
 PROCESSED_FOLDER_NAME = "traitees"
+RETAKE_FOLDER_NAME = "a_refaire"
 
 class ReviewApp:
     def __init__(self, root, csv_path):
@@ -33,15 +34,18 @@ class ReviewApp:
         # Load AI Context
         self.categories_context = load_categories() if load_categories else None
         
-        self.load_data()
-        self.setup_ui()
-        self.show_current_item()
+        if self.load_data():
+            self.setup_ui()
+            self.show_current_item()
+        else:
+            # If loading failed, ensure we exit if verify logic didn't destroy (though logic above says it destroys)
+            pass
 
     def load_data(self):
         if not os.path.exists(self.csv_path):
             messagebox.showerror("Erreur", f"Fichier introuvable: {self.csv_path}")
             self.root.destroy()
-            return
+            return False
             
         try:
             # Robust loading similar to main.py
@@ -80,6 +84,9 @@ class ReviewApp:
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible de lire le CSV: {e}")
             self.root.destroy()
+            return False
+            
+        return True
 
     def save_data(self):
         try:
@@ -147,6 +154,9 @@ class ReviewApp:
 
         self.btn_comment = tk.Button(self.btn_frame, text="💬 Commenter & Passer", bg="#fff3cd", font=("Arial", 12), command=self.comment_and_skip_item)
         self.btn_comment.pack(side="left", padx=5, expand=True, fill="x")
+
+        self.btn_retake = tk.Button(self.btn_frame, text="📸 À Refaire", bg="#f5c6cb", font=("Arial", 12), command=self.mark_as_retake)
+        self.btn_retake.pack(side="left", padx=5, expand=True, fill="x")
         
         self.btn_prev = tk.Button(self.btn_frame, text="⬅️ Précédent", font=("Arial", 12), command=self.prev_item)
         self.btn_prev.pack(side="left", padx=5, expand=True, fill="x")
@@ -481,6 +491,45 @@ class ReviewApp:
                     entry.config(state="normal")
                     entry.delete(0, tk.END)
                     entry.insert(0, str(val))
+
+
+    def mark_as_retake(self):
+        if self.current_index >= len(self.review_queue): return
+        
+        idx = self.review_queue[self.current_index]
+        if not self.current_image_path or not os.path.exists(self.current_image_path):
+             messagebox.showwarning("Attention", "Pas d'image trouvée à déplacer.")
+             # Still allow flagging in CSV?
+             # Let's clean CSV just in case
+        
+        try:
+            # Move File
+            if self.current_image_path and os.path.exists(self.current_image_path):
+                 retake_dir = os.path.join(self.folder_path, RETAKE_FOLDER_NAME)
+                 if not os.path.exists(retake_dir):
+                     os.makedirs(retake_dir)
+                 
+                 filename = os.path.basename(self.current_image_path)
+                 dest_path = os.path.join(retake_dir, filename)
+                 
+                 # Handle collisions
+                 if os.path.exists(dest_path):
+                      base, ext = os.path.splitext(filename)
+                      import time
+                      dest_path = os.path.join(retake_dir, f"{base}_{int(time.time())}{ext}")
+                 
+                 shutil.move(self.current_image_path, dest_path)
+                 print(f"Moved to retake: {dest_path}")
+                 self.current_image_path = None # It's gone
+            
+            # Delete from CSV
+            self.df = self.df.drop(idx)
+            
+            self.save_data()
+            self.next_item()
+            
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors du marquage à refaire: {e}")
 
     def next_item(self):
         self.current_index += 1
