@@ -61,6 +61,10 @@ class ReviewApp:
                      self.df[col] = self.df[col].astype(str).str.replace(',', '.', regex=False)
                      self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0.0)
             
+            # Ensure Commentaire column exists
+            if "Commentaire" not in self.df.columns:
+                self.df["Commentaire"] = ""
+            
             # Filter items to review: Reliability < 100
             # Sort by reliability ascending (lowest confidence first)
             if "Fiabilite" in self.df.columns:
@@ -117,6 +121,7 @@ class ReviewApp:
         # Fields
         self.fields = {}
         
+        self.create_field("Commentaire") # Add Commentaire field
         self.create_field("ID", readonly=True)
         self.create_field("Fichier Original", readonly=True)
         self.create_field("Categorie")
@@ -134,6 +139,9 @@ class ReviewApp:
         
         self.btn_validate = tk.Button(self.btn_frame, text="✅ Valider (100%)", bg="#d4edda", font=("Arial", 12), command=self.validate_item)
         self.btn_validate.pack(side="left", padx=5, expand=True, fill="x")
+
+        self.btn_comment = tk.Button(self.btn_frame, text="💬 Commenter & Passer", bg="#fff3cd", font=("Arial", 12), command=self.comment_and_skip_item)
+        self.btn_comment.pack(side="left", padx=5, expand=True, fill="x")
         
         self.btn_prev = tk.Button(self.btn_frame, text="⬅️ Précédent", font=("Arial", 12), command=self.prev_item)
         self.btn_prev.pack(side="left", padx=5, expand=True, fill="x")
@@ -235,8 +243,22 @@ class ReviewApp:
                 messagebox.showerror("Erreur", f"Impossible de pivoter l'image: {e}")
 
 
+
     def display_placeholder(self, text):
         self.image_label.config(image="", text=text)
+
+    def comment_and_skip_item(self):
+        if self.current_index < len(self.review_queue):
+            idx = self.review_queue[self.current_index]
+            try:
+                # Save comment
+                self.df.at[idx, "Commentaire"] = self.get_field_value("Commentaire")
+                self.save_data()
+                self.next_item()
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Erreur lors du commentaire: {e}")
+        else:
+             self.next_item()
 
     def get_field_value(self, name):
         return self.fields[name].get()
@@ -249,6 +271,7 @@ class ReviewApp:
             self.df.at[idx, "Nom"] = self.get_field_value("Nom")
             self.df.at[idx, "Categorie"] = self.get_field_value("Categorie")
             self.df.at[idx, "Etat"] = self.get_field_value("Etat")
+            self.df.at[idx, "Commentaire"] = self.get_field_value("Commentaire")
             
             # Numeric fields
             try:
