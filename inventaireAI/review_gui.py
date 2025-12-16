@@ -38,6 +38,18 @@ class ReviewApp:
         if self.load_data():
             self.setup_ui()
             self.show_current_item()
+            
+            # Strategy Explanation Popup
+            explanation = (
+                "Les objets sont affichés du **MOINS fiable au PLUS fiable**.\n"
+                "(Les pires erreurs apparaissent en premier)\n\n"
+                "CONSEIL :\n"
+                "Vous n'êtes pas obligé de tout valider !\n"
+                "Corrigez les premières erreurs, et dès que les objets suivants vous semblent corrects,\n"
+                "vous pouvez considérer que le reste de l'inventaire est bon et arrêter."
+            )
+            self.root.after(100, lambda: messagebox.showinfo("Stratégie de Révision", explanation))
+            
         else:
             # If loading failed, ensure we exit if verify logic didn't destroy (though logic above says it destroys)
             pass
@@ -116,8 +128,8 @@ class ReviewApp:
         self.lbl_title.pack(pady=(0, 20))
         
         # Rotation and Rescan Toolbar inside right frame
-        self.tools_frame = tk.Frame(self.right_frame, pady=5)
-        self.tools_frame.pack(fill="x")
+        self.tools_frame = tk.LabelFrame(self.right_frame, text="Outils & Corrections", padding=10)
+        self.tools_frame.pack(fill="x", pady=(0, 15))
         
         self.btn_rotate = tk.Button(self.tools_frame, text="🔄 Pivoter", command=self.rotate_image)
         self.btn_rotate.pack(side="left", padx=5)
@@ -148,36 +160,62 @@ class ReviewApp:
         self.create_field("Prix Neuf Estime")
         
         self.create_field("Fiabilite", readonly=True)
+        ToolTip(self.fields["Fiabilite"], "Confiance de l'IA (0-100%).\nSi < 100%, vérifiez bien les infos.\nLe bouton 'Valider' la passera à 100%.")
         
         # Buttons
-        self.btn_frame = tk.Frame(self.right_frame, pady=30)
+        # Buttons
+        self.btn_frame = tk.Frame(self.right_frame, pady=20)
         self.btn_frame.pack(fill="x")
         
-        self.btn_validate = tk.Button(self.btn_frame, text="✅ Valider (100%)", bg="#d4edda", font=("Arial", 12), command=self.validate_item)
-        self.btn_validate.pack(side="left", padx=5, expand=True, fill="x")
+        # Row 1: PRIMARY ACTION (Validate)
+        row1 = tk.Frame(self.btn_frame)
+        row1.pack(fill="x", pady=5)
+        
+        self.btn_validate = tk.Button(row1, text="✅ Valider (100%)", bg="#d4edda", font=("Arial", 12, "bold"), height=2, command=self.validate_item)
+        self.btn_validate.pack(fill="x")
         ToolTip(self.btn_validate, "Confirmer que les infos sont correctes.\nMet la fiabilité à 100% et passe au suivant.")
 
-        self.btn_comment = tk.Button(self.btn_frame, text="💬 Commenter & Passer", bg="#fff3cd", font=("Arial", 12), command=self.comment_and_skip_item)
-        self.btn_comment.pack(side="left", padx=5, expand=True, fill="x")
+        # Row 2: SECONDARY ACTIONS (Comment, Retake, Delete)
+        row2 = tk.Frame(self.btn_frame)
+        row2.pack(fill="x", pady=5)
+        
+        self.btn_comment = tk.Button(row2, text="💬 Commenter", bg="#fff3cd", command=self.comment_and_skip_item)
+        self.btn_comment.pack(side="left", padx=2, expand=True, fill="x")
         ToolTip(self.btn_comment, "Sauvegarder un commentaire sans valider totalement.\nUtile si vous avez un doute.")
 
-        self.btn_retake = tk.Button(self.btn_frame, text="📸 À Refaire", bg="#f5c6cb", font=("Arial", 12), command=self.mark_as_retake)
-        self.btn_retake.pack(side="left", padx=5, expand=True, fill="x")
+        self.btn_retake = tk.Button(row2, text="📸 À Refaire", bg="#f5c6cb", command=self.mark_as_retake)
+        self.btn_retake.pack(side="left", padx=2, expand=True, fill="x")
         ToolTip(self.btn_retake, "Photo ratée ?\nDéplace l'image dans le dossier 'a_refaire' et la retire de la liste.")
         
-        self.btn_prev = tk.Button(self.btn_frame, text="⬅️ Précédent", font=("Arial", 12), command=self.prev_item)
-        self.btn_prev.pack(side="left", padx=5, expand=True, fill="x")
-
-        self.btn_skip = tk.Button(self.btn_frame, text="➡️ Suivant", font=("Arial", 12), command=self.next_item)
-        self.btn_skip.pack(side="left", padx=5, expand=True, fill="x")
-        
-        self.btn_delete = tk.Button(self.btn_frame, text="🗑️ Supprimer Ligne", bg="#f8d7da", font=("Arial", 12), command=self.delete_item)
-        self.btn_delete.pack(side="left", padx=5, expand=True, fill="x")
+        self.btn_delete = tk.Button(row2, text="🗑️ Suppr.", bg="#f8d7da", command=self.delete_item)
+        self.btn_delete.pack(side="left", padx=2, expand=True, fill="x")
         ToolTip(self.btn_delete, "Supprimer définitivement cet objet de l'inventaire.")
 
+        # Row 3: NAVIGATION (Prev, Next)
+        row3 = tk.Frame(self.btn_frame)
+        row3.pack(fill="x", pady=10)
+        
+        self.btn_prev = tk.Button(row3, text="⬅️ Précédent", command=self.prev_item)
+        self.btn_prev.pack(side="left", padx=5, expand=True, fill="x")
+
+        self.btn_skip = tk.Button(row3, text="Suivant ➡️", command=self.next_item)
+        self.btn_skip.pack(side="left", padx=5, expand=True, fill="x")
+
         # Status
-        self.lbl_status = tk.Label(self.right_frame, text="", fg="blue")
-        self.lbl_status.pack(side="bottom", pady=10)
+        self.lbl_status = tk.Label(self.right_frame, text="", fg="blue", font=("Arial", 10, "bold"))
+        self.lbl_status.pack(side="bottom", pady=(5, 10))
+
+        # Help Text
+        help_text = (
+            "Trié par fiabilité croissante (Pires en premier).\n"
+            "Fiabilité < 100% = À vérifier. Arrêtez-vous quand c'est bon !"
+        )
+        self.lbl_help = tk.Label(self.right_frame, text=help_text, fg="#666", font=("Arial", 9), justify="center", bg="#f8f9fa", pady=5)
+        self.lbl_help.pack(side="bottom", fill="x", pady=5)
+
+        # Bind Keys
+        self.root.bind('<Left>', lambda e: self.prev_item())
+        self.root.bind('<Right>', lambda e: self.next_item())
 
     def create_field(self, name, readonly=False):
         row = tk.Frame(self.form_frame, pady=5)

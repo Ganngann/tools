@@ -17,44 +17,77 @@ class LauncherApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Inventaire AI - Launcher")
-        self.root.geometry("600x450")
+        self.root.geometry("600x550")
+        self.root.minsize(450, 500)
         self.root.configure(bg="#f0f2f5")
         
         # Style
         self.style = ttk.Style()
         self.style.theme_use('clam')
-        self.style.configure("Big.TButton", font=("Arial", 14), padding=20)
+        self.style.configure("Big.TButton", font=("Arial", 14), padding=15)
         self.style.configure("Title.TLabel", font=("Arial", 24, "bold"), background="#f0f2f5", foreground="#333")
         self.style.configure("Sub.TLabel", font=("Arial", 12), background="#f0f2f5", foreground="#666")
 
         # Header
-        header_frame = tk.Frame(root, bg="#f0f2f5", pady=40)
-        header_frame.pack(fill="x")
+        header_frame = tk.Frame(root, bg="#f0f2f5", pady=20)
+        header_frame.pack(fill="x", padx=20)
         
         lbl_title = ttk.Label(header_frame, text="Inventaire AI", style="Title.TLabel")
         lbl_title.pack()
         
         lbl_sub = ttk.Label(header_frame, text="Choisissez une action pour commencer", style="Sub.TLabel")
-        lbl_sub.pack(pady=(10, 0))
+        lbl_sub.pack(pady=(5, 10))
+
+        # Explanations
+        expl_text = (
+            "1. 🆕 Lancez un scan sur un dossier de photos.\n"
+            "   -> L'IA compte les objets et crée un fichier CSV.\n\n"
+            "2. 🛠️ Ouvrez ce CSV pour valider les résultats.\n"
+            "   -> Corrigez les erreurs, ajoutez les prix.\n"
+            "   -> Bouton 'À Refaire' : déplace la photo dans le dossier 'a_refaire'\n"
+            "      pour que vous puissiez la reprendre plus tard."
+        )
+        lbl_expl = tk.Label(
+            header_frame, 
+            text=expl_text, 
+            bg="#e1e4e8", 
+            fg="#333", 
+            justify="left", 
+            font=("Arial", 11),
+            padx=15, 
+            pady=15,
+            wraplength=550,
+            relief="groove",
+            borderwidth=1
+        )
+        lbl_expl.pack(fill="x", pady=(0, 10), padx=10)
 
         # Buttons Frame
-        btn_frame = tk.Frame(root, bg="#f0f2f5", pady=20)
-        btn_frame.pack(expand=True)
+        btn_frame = tk.Frame(root, bg="#f0f2f5", pady=10)
+        btn_frame.pack(expand=True, fill="x", padx=40)
 
-
-
-        self.btn_scan = ttk.Button(btn_frame, text="🆕 Nouvel Inventaire\n(Scanner des photos)", style="Big.TButton", command=self.start_new_inventory)
-        self.btn_scan.pack(fill="x", pady=10, ipadx=50)
+        self.btn_scan = ttk.Button(
+            btn_frame, 
+            text="🆕 Nouvel Inventaire\n(Scanner des photos)", 
+            style="Big.TButton", 
+            command=self.start_new_inventory
+        )
+        self.btn_scan.pack(fill="x", pady=10)
         ToolTip(self.btn_scan, "Sélectionnez un dossier de photos.\nL'IA analysera chaque image pour créer un fichier Excel (CSV).")
 
-        self.btn_review = ttk.Button(btn_frame, text="🛠️ Réviser / Corriger\n(Ouvrir un CSV)", style="Big.TButton", command=self.start_review)
-        self.btn_review.pack(fill="x", pady=10, ipadx=50)
+        self.btn_review = ttk.Button(
+            btn_frame, 
+            text="🛠️ Réviser / Corriger\n(Ouvrir un CSV)", 
+            style="Big.TButton", 
+            command=self.start_review
+        )
+        self.btn_review.pack(fill="x", pady=10)
         ToolTip(self.btn_review, "Ouvrez un fichier CSV existant pour :\n- Corriger les erreurs de l'IA\n- Ajouter des prix\n- Valider l'inventaire")
         
         # Footer
         footer_frame = tk.Frame(root, bg="#f0f2f5", pady=10)
         footer_frame.pack(side="bottom", fill="x")
-        lbl_ver = tk.Label(footer_frame, text="v1.0 - Régie des Quartiers", bg="#f0f2f5", fg="#999")
+        lbl_ver = tk.Label(footer_frame, text="v1.1 - Régie des Quartiers", bg="#f0f2f5", fg="#999")
         lbl_ver.pack()
 
     def start_new_inventory(self):
