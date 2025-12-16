@@ -4,7 +4,7 @@ from tkinter import ttk, messagebox, simpledialog
 from PIL import Image, ImageTk
 import pandas as pd
 import argparse
-from inventory_ai import analyze_image, load_categories
+from inventory_ai import analyze_image, analyze_image_multiple, load_categories
 from dotenv import load_dotenv
 import shutil
 
@@ -114,6 +114,9 @@ class ReviewApp:
         
         self.btn_rescan = tk.Button(self.tools_frame, text="🧠 Rescan (Indices)", bg="#e2e6ea", command=self.rescan_item)
         self.btn_rescan.pack(side="left", padx=5)
+
+        self.btn_multi = tk.Button(self.tools_frame, text="🔢 Scan Multi", bg="#e2e6ea", command=self.scan_multi_item)
+        self.btn_multi.pack(side="left", padx=5)
         
         self.form_frame = tk.Frame(self.right_frame)
         self.form_frame.pack(fill="x")
@@ -340,30 +343,7 @@ class ReviewApp:
             result = analyze_image(self.current_image_path, categories_context=self.categories_context, user_hint=hint)
             
             # Update fields directly
-            fields_map = {
-                "Nom": "nom",
-                "Categorie": "categorie", 
-                "Etat": "etat",
-                "Quantite": "quantite",
-                "Prix Unitaire": "prix_unitaire_estime",
-                "Prix Neuf Estime": "prix_neuf_estime"
-            }
-            
-            for ui_field, result_key in fields_map.items():
-                if result_key in result:
-                    val = result[result_key]
-                    if result_key == "quantite":
-                         try: val = int(float(str(val)))
-                         except: pass
-                    elif "prix" in result_key:
-                         try: val = float(str(val))
-                         except: pass
-                         
-                    entry = self.fields.get(ui_field)
-                    if entry:
-                        entry.config(state="normal")
-                        entry.delete(0, tk.END)
-                        entry.insert(0, str(val))
+            self._apply_scan_result(result)
                         
             messagebox.showinfo("Succès", "Analyse terminée ! Vérifiez les valeurs avant de valider.")
             
@@ -371,6 +351,133 @@ class ReviewApp:
             messagebox.showerror("Erreur", f"Echec de l'analyse: {e}")
         finally:
             self.root.config(cursor="")
+
+    def scan_multi_item(self):
+        if not self.current_image_path:
+            messagebox.showwarning("Attention", "Pas d'image chargée pour l'analyse.")
+            return
+            
+        hint = simpledialog.askstring("Scan Multi", "Indice optionnel (ex: 'vis', 'boulons'):")
+        if hint is None: return
+
+        try:
+            self.root.config(cursor="watch")
+            self.root.update()
+            
+            print(f"Multi-scanning with hint: {hint}")
+            results = analyze_image_multiple(self.current_image_path, categories_context=self.categories_context, user_hint=hint, target_element=hint)
+            
+            if not isinstance(results, list):
+                results = [results]
+                
+            if len(results) == 0:
+                messagebox.showinfo("Résultat", "Aucun objet détecté.")
+                return
+                
+            # First item updates CURRENT row
+            first_item = results[0]
+            self._apply_scan_result(first_item)
+            
+            # Additional items create NEW rows
+            new_rows_count = 0
+            if len(results) > 1:
+                idx = self.review_queue[self.current_index]
+                current_row_data = self.df.loc[idx].to_dict() # Base on current to keep ID/Filename/etc mostly
+                
+                new_ids = []
+                
+                # Determine next ID
+                max_id = 0
+                if "ID" in self.df.columns:
+                     try: max_id = self.df["ID"].max()
+                     except: pass
+                
+                for i in range(1, len(results)):
+                    item = results[i]
+                    new_rows_count += 1
+                    max_id += 1
+                    
+                    new_row = current_row_data.copy()
+                    new_row["ID"] = max_id
+                    new_row["Fiabilite"] = item.get("fiabilite", 0)
+                    new_row["Commentaire"] = "Ajouté via Scan Multi"
+                    
+                    # Apply keys
+                    mapping = {
+                        "nom": "Nom",
+                        "categorie": "Categorie",
+                        "etat": "Etat",
+                        "quantite": "Quantite",
+                        "prix_unitaire_estime": "Prix Unitaire",
+                        "prix_neuf_estime": "Prix Neuf Estime"
+                    }
+                    for res_key, df_key in mapping.items():
+                        val = item.get(res_key, "")
+                        if df_key in ["Quantite", "Prix Unitaire", "Prix Neuf Estime", "Prix Total"]:
+                             try: val = float(str(val))
+                             except: pass
+                        new_row[df_key] = val
+                        
+                    # Calculate total
+                    try:
+                        q = float(new_row.get("Quantite", 0))
+                        p = float(new_row.get("Prix Unitaire", 0))
+                        new_row["Prix Total"] = q * p
+                    except: pass
+                    
+                    new_ids.append(len(self.df)) # Index of new row
+                    self.df = pd.concat([self.df, pd.DataFrame([new_row])], ignore_index=True)
+
+                # Add new items to review queue (insert after current)
+                # self.review_queue is a list of INDICES of the DF
+                # We just appended rows, so their indices are len(df)-new_rows_count ... len(df)-1
+                # But careful, concat reindexes usually if ignore_index=True
+                # The indices we want are the last new_rows_count indices of the NEW df
+                
+                # Re-sort/filter might be complex, let's just append them to queue end for simplicity
+                # Or insert them right after current
+                current_queue_pos = self.current_index
+                
+                # The indices of the new rows in the new DF:
+                new_indices = list(range(len(self.df) - new_rows_count, len(self.df)))
+                
+                # Insert details
+                self.review_queue[current_queue_pos+1:current_queue_pos+1] = new_indices
+                
+                self.save_data()
+
+            messagebox.showinfo("Succès", f"Analyse terminée !\n\nObjet courant mis à jour.\n{new_rows_count} nouveaux objets ajoutés à la suite.")
+
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Echec du scan multi: {e}")
+        finally:
+            self.root.config(cursor="")
+
+    def _apply_scan_result(self, result):
+        fields_map = {
+            "Nom": "nom",
+            "Categorie": "categorie", 
+            "Etat": "etat",
+            "Quantite": "quantite",
+            "Prix Unitaire": "prix_unitaire_estime",
+            "Prix Neuf Estime": "prix_neuf_estime"
+        }
+        
+        for ui_field, result_key in fields_map.items():
+            if result_key in result:
+                val = result[result_key]
+                if result_key == "quantite":
+                        try: val = int(float(str(val)))
+                        except: pass
+                elif "prix" in result_key:
+                        try: val = float(str(val))
+                        except: pass
+                        
+                entry = self.fields.get(ui_field)
+                if entry:
+                    entry.config(state="normal")
+                    entry.delete(0, tk.END)
+                    entry.insert(0, str(val))
 
     def next_item(self):
         self.current_index += 1
