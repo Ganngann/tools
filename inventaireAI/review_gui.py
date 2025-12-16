@@ -312,10 +312,7 @@ class ReviewApp:
             else:
                  return "#ccffcc" # Should not be reached logic-wise but fallback
 
-            else:
-                 return "#ccffcc" # Full Green (covered by >=90 check above?)
-                 # The >=90 check is above, so this block is for 50 <= score < 90.
-                 # So < 90 covers everything remaining.
+
 
     def show_current_item(self):
         # Reset rotation for new item
