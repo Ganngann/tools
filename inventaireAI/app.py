@@ -20,9 +20,9 @@ class LauncherApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"Inventaire AI - Launcher v{VERSION}")
-        self.root.geometry("600x550")
-        self.root.minsize(450, 500)
-        self.root.configure(bg="#f0f2f5")
+        self.root.geometry("750x650") # Larger window for better layout
+        self.root.minsize(600, 600)
+        self.root.configure(bg="#f8f9fa")
         
         # Check updates
         check_for_updates_thread(self.on_update_result)
@@ -30,88 +30,77 @@ class LauncherApp:
         # Style
         self.style = ttk.Style()
         self.style.theme_use('clam')
-        self.style.configure("Big.TButton", font=("Arial", 14), padding=15)
-        self.style.configure("Title.TLabel", font=("Arial", 24, "bold"), background="#f0f2f5", foreground="#333")
-        self.style.configure("Sub.TLabel", font=("Arial", 12), background="#f0f2f5", foreground="#666")
+        self.style.configure("Big.TButton", font=("Segoe UI", 12, "bold"), padding=10)
+        self.style.configure("Title.TLabel", font=("Segoe UI", 20, "bold"), background="#f8f9fa", foreground="#2c3e50")
+        self.style.configure("Header.TLabel", font=("Segoe UI", 12, "bold"), background="#f8f9fa", foreground="#34495e")
+        self.style.configure("Step.TLabel", font=("Segoe UI", 11, "bold"), background="#ffffff", foreground="#2980b9")
+        self.style.configure("Normal.TLabel", font=("Segoe UI", 10), background="#ffffff", foreground="#555")
 
-        # Header
-        header_frame = tk.Frame(root, bg="#f0f2f5", pady=20)
-        header_frame.pack(fill="x", padx=20)
+        # Main Container
+        main_frame = tk.Frame(root, bg="#f8f9fa")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Update Notification Area (Top)
+        self.lbl_ver = tk.Label(main_frame, text=f"v{VERSION} - Régie des Quartiers", bg="#f8f9fa", fg="#bdc3c7", font=("Segoe UI", 9))
+        self.lbl_ver.pack(side="bottom", pady=(10, 0))
+
+        # Title
+        lbl_title = ttk.Label(main_frame, text="Inventaire AI - Assistant", style="Title.TLabel")
+        lbl_title.pack(pady=(0, 20))
+
+        # --- INSTRUCTIONS PANEL ---
+        instr_frame = tk.LabelFrame(main_frame, text="  Guide d'Utilisation  ", font=("Segoe UI", 11, "bold"), bg="#ffffff", fg="#333", padx=15, pady=15, relief="flat", bd=1)
+        instr_frame.pack(fill="x", pady=(0, 20))
         
-        lbl_title = ttk.Label(header_frame, text="Inventaire AI", style="Title.TLabel")
-        lbl_title.pack()
+        # Steps
+        steps = [
+            ("1. SCAN", "Cliquez sur 'Nouvel Inventaire'. Sélectionnez le dossier de photos.\nL'IA va identifier les objets et créer un fichier CSV."),
+            ("2. VERIFICATION", "Ouvrez le fichier CSV généré avec 'Réviser / Corriger'.\nVérifiez les noms, etc."),
+            ("3. CORRECTION", "Si une photo est mal cadrée ou contient plusieurs objets :\nUtilisez le bouton 'À Refaire'. L'image sera déplacée pour être reprise.")
+        ]
         
-        lbl_sub = ttk.Label(header_frame, text="Choisissez une action pour commencer", style="Sub.TLabel")
-        lbl_sub.pack(pady=(5, 10))
+        for title, desc in steps:
+            step_container = tk.Frame(instr_frame, bg="#ffffff", pady=5)
+            step_container.pack(fill="x", anchor="w")
+            ttk.Label(step_container, text=title, style="Step.TLabel").pack(anchor="w")
+            tk.Label(step_container, text=desc, bg="#ffffff", fg="#555", font=("Segoe UI", 10), justify="left").pack(anchor="w", padx=(0, 0))
 
-        # Explanations
-        expl_text = (
-            "1. 🆕 Lancez un scan sur un dossier de photos.\n"
-            "   -> L'IA compte les objets et crée un fichier CSV.\n\n"
-            "2. 🛠️ Ouvrez ce CSV pour valider les résultats.\n"
-            "   -> Corrigez les erreurs, ajoutez les prix.\n"
-            "   -> Bouton 'À Refaire' : déplace la photo dans le dossier 'a_refaire'\n"
-            "      pour que vous puissiez la reprendre plus tard."
-        )
-        lbl_expl = tk.Label(
-            header_frame, 
-            text=expl_text, 
-            bg="#e1e4e8", 
-            fg="#333", 
-            justify="left", 
-            font=("Arial", 11),
-            padx=15, 
-            pady=15,
-            wraplength=550,
-            relief="groove",
-            borderwidth=1
-        )
-        lbl_expl.pack(fill="x", pady=(0, 10), padx=10)
-
-        # Cost Disclaimer
+        # --- DISCLAIMER PANEL ---
+        disclaimer_frame = tk.Frame(main_frame, bg="#fef9e7", padx=10, pady=10, relief="solid", bd=1) # Light yellow warning bg
+        disclaimer_frame.pack(fill="x", pady=(0, 25))
+        
+        disc_icon = tk.Label(disclaimer_frame, text="⚠️", bg="#fef9e7", font=("Segoe UI", 14))
+        disc_icon.pack(side="left", padx=(5, 10))
+        
         disclaimer_text = (
-            "ℹ️ Note : Le coût est d'environ 0,001 € par photo (soit 1 € pour 1000 photos).\n"
-            "   L'outil est libre d'utilisation, mais n'est pas conçu pour traiter\n"
-            "   des volumes massifs (ex: 1 million de photos)."
+            "COUT & LIMITES : Environ 0,001 € par photo (1€ / 1000 photos).\n"
+            "Outil conçu pour des volumes modérés. Ne pas lancer sur des banques d'images massives."
         )
-        lbl_disclaimer = tk.Label(
-            header_frame,
-            text=disclaimer_text,
-            bg="#f0f2f5",
-            fg="#666",
-            justify="center",
-            font=("Arial", 9, "italic")
-        )
-        lbl_disclaimer.pack(fill="x", pady=(0, 10))
+        tk.Label(disclaimer_frame, text=disclaimer_text, bg="#fef9e7", fg="#7f8c8d", font=("Segoe UI", 9, "bold"), justify="left").pack(side="left")
 
-        # Buttons Frame
-        btn_frame = tk.Frame(root, bg="#f0f2f5", pady=10)
-        btn_frame.pack(expand=True, fill="x", padx=40)
+        # --- ACTIONS PANEL ---
+        btn_frame = tk.Frame(main_frame, bg="#f8f9fa")
+        btn_frame.pack(fill="x", expand=True)
+        
+        # Grid layout for buttons for better centering
+        btn_frame.columnconfigure(0, weight=1)
+        btn_frame.columnconfigure(1, weight=1)
 
         self.btn_scan = ttk.Button(
             btn_frame, 
-            text="🆕 Nouvel Inventaire\n(Scanner des photos)", 
+            text="🆕  NOUVEL INVENTAIRE\nScanner un dossier", 
             style="Big.TButton", 
             command=self.start_new_inventory
         )
-        self.btn_scan.pack(fill="x", pady=10)
-        ToolTip(self.btn_scan, "Sélectionnez un dossier de photos.\nL'IA analysera chaque image pour créer un fichier Excel (CSV).")
-
+        self.btn_scan.grid(row=0, column=0, padx=10, sticky="ew")
+        
         self.btn_review = ttk.Button(
             btn_frame, 
-            text="🛠️ Réviser / Corriger\n(Ouvrir un CSV)", 
+            text="🛠️  REVISER / CORRIGER\nOuvrir un inventaire", 
             style="Big.TButton", 
             command=self.start_review
         )
-        self.btn_review.pack(fill="x", pady=10)
-        ToolTip(self.btn_review, "Ouvrez un fichier CSV existant pour :\n- Corriger les erreurs de l'IA\n- Ajouter des prix\n- Valider l'inventaire")
-        
-        # Footer
-        footer_frame = tk.Frame(root, bg="#f0f2f5", pady=10)
-        footer_frame.pack(side="bottom", fill="x")
-        
-        self.lbl_ver = tk.Label(footer_frame, text=f"v{VERSION} ({BUILD_DATE}) - Régie des Quartiers", bg="#f0f2f5", fg="#999")
-        self.lbl_ver.pack()
+        self.btn_review.grid(row=0, column=1, padx=10, sticky="ew")
 
     def on_update_result(self, result):
         has_update, new_ver, error = result
