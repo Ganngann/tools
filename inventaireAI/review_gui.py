@@ -305,12 +305,13 @@ class ReviewApp:
             # Simple approach: 
             # 50-70: Red fading out, Green fading in
             # Gradient simulation with steps
-            if score < 60:
-                return "#ffe5d9" # Red-Orange
-            elif score < 75:
-                 return "#fff3cd" # Yellow
+            if score < 70:
+                return "#ffeeba" # Orange/Yellow
             elif score < 90:
-                 return "#d4edda" # Pale Green
+                 return "#fff3cd" # Light Yellow
+            else:
+                 return "#ccffcc" # Should not be reached logic-wise but fallback
+
             else:
                  return "#ccffcc" # Full Green (covered by >=90 check above?)
                  # The >=90 check is above, so this block is for 50 <= score < 90.
