@@ -459,7 +459,7 @@ def main():
             "ID": obj_id,
             "Fichier Original": new_filename,
             "Nom": nom_objet,
-            "Categorie": result.get("categorie", "Inconnu"),
+            "Categorie": result.get("categorie_id", "Inconnu"),
             "Categorie ID": result.get("categorie_id", "Inconnu"),
             "Fiabilite": result.get("fiabilite", 0),
             "Quantite": quantite_val,

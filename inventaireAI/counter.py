@@ -465,7 +465,7 @@ def process_inventory(input_path, target_element=None, progress_callback=None):
             # Map to columns
             update_data = {
                 "Nom": nom_objet,
-                "Categorie": item.get("categorie", "Inconnu"),
+                "Categorie": item.get("categorie_id", "Inconnu"),
                 "Categorie ID": item.get("categorie_id", "Inconnu"),
                 "Fiabilite": item.get("fiabilite", 0),
                 "Quantite": quantite_val,

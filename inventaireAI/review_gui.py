@@ -217,20 +217,48 @@ class ReviewApp:
         self.root.bind('<Left>', lambda e: self.prev_item())
         self.root.bind('<Right>', lambda e: self.next_item())
 
+    def load_category_list(self):
+        cats = {} # Map ID -> Name
+        try:
+            csv_path = os.path.join(self.folder_path, "categories.csv")
+            if not os.path.exists(csv_path):
+                 script_dir = os.path.dirname(os.path.abspath(__file__))
+                 csv_path = os.path.join(script_dir, "categories.csv")
+            
+            if os.path.exists(csv_path):
+                cat_df = pd.read_csv(csv_path)
+                if "id" in cat_df.columns and "nom" in cat_df.columns:
+                    for _, row in cat_df.iterrows():
+                        cats[row["id"]] = row["nom"]
+        except Exception as e:
+            print(f"Error loading categories: {e}")
+        return cats
+
     def create_field(self, name, readonly=False):
         row = tk.Frame(self.form_frame, pady=5)
         row.pack(fill="x")
         lbl = tk.Label(row, text=name, width=20, anchor="w", font=("Arial", 10))
         lbl.pack(side="left")
         
-        entry = tk.Entry(row, font=("Arial", 10))
+        if name == "Categorie":
+            # Use Combobox - Display Names
+            self.category_map = self.load_category_list()
+            # Sort names for display
+            display_values = sorted(list(self.category_map.values()))
+            
+            entry = ttk.Combobox(row, values=display_values, font=("Arial", 10))
+        elif name == "Etat":
+            entry = ttk.Combobox(row, values=["Neuf", "Occasion", "Inconnu"], font=("Arial", 10))
+        else:
+            entry = tk.Entry(row, font=("Arial", 10))
+        
         entry.pack(side="left", expand=True, fill="x")
         
         if readonly:
             entry.config(state="readonly")
             
         self.fields[name] = entry
-    
+
     def show_current_item(self):
         # Reset rotation for new item
         self.current_rotation = 0
@@ -250,9 +278,19 @@ class ReviewApp:
         for field, entry in self.fields.items():
             val = row.get(field, "")
             if pd.isna(val): val = ""
+            
             entry.config(state="normal")
             entry.delete(0, tk.END)
-            entry.insert(0, str(val))
+            
+            if field == "Categorie":
+                # Value in DF is now expected to be an ID
+                # We want to display the NAME
+                cat_id = str(val).strip()
+                cat_name = self.category_map.get(cat_id, cat_id) # Fallback to ID if not found
+                entry.insert(0, cat_name)
+            else:
+                entry.insert(0, str(val))
+                
             if field in ["ID", "Fichier", "Fichier Original", "Fiabilite"]:
                 entry.config(state="readonly")
 
@@ -340,7 +378,17 @@ class ReviewApp:
         # Update DataFrame from fields
         try:
             self.df.at[idx, "Nom"] = self.get_field_value("Nom")
-            self.df.at[idx, "Categorie"] = self.get_field_value("Categorie")
+            
+            # CATEGORY LOGIC: Name -> ID
+            cat_name = self.get_field_value("Categorie")
+            # Find ID for this name
+            cat_id = cat_name # Default
+            for cid, cname in self.category_map.items():
+                if cname == cat_name:
+                    cat_id = cid
+                    break
+            self.df.at[idx, "Categorie"] = cat_id
+            
             self.df.at[idx, "Etat"] = self.get_field_value("Etat")
             self.df.at[idx, "Commentaire"] = self.get_field_value("Commentaire")
             
