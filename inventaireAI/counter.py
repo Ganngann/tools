@@ -137,6 +137,25 @@ def compress_image_to_target(source_path, dest_path, max_size_kb=None):
 
 
 
+def save_dataframe_atomic(df, path):
+    """
+    Saves DataFrame to CSV atomically to prevent corruption on interrupt.
+    Writes to .tmp first, then renames.
+    """
+    temp_path = path + ".tmp"
+    try:
+        df.to_csv(temp_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+        if os.path.exists(temp_path):
+             try:
+                 os.replace(temp_path, path)
+             except OSError:
+                 # Windows fallback if file locked or other issue
+                 if os.path.exists(path):
+                     os.remove(path)
+                 os.rename(temp_path, path)
+    except Exception as e:
+        print(f"Error saving CSV atomically: {e}")
+
 def process_inventory(input_path, target_element=None, progress_callback=None, stop_event=None):
     valid_extensions = ('.jpg', '.jpeg', '.png', '.webp')
 
@@ -279,9 +298,10 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
     # Find new files
     existing_files = set()
     if "Fichier" in df.columns:
-        existing_files = set(df["Fichier"].astype(str).tolist())
+        # Case insensitive check for Windows robustness
+        existing_files = set(df["Fichier"].astype(str).str.lower().tolist())
     
-    new_files = [img for img in images if img not in existing_files]
+    new_files = [img for img in images if img.lower() not in existing_files]
     
     if new_files:
         print(f"Found {len(new_files)} new files. Adding to inventory list...")
@@ -306,7 +326,8 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
         else:
             df = pd.concat([df, new_df], ignore_index=True)
             
-        df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+            
+        save_dataframe_atomic(df, csv_path)
         print(f"Inventory list updated. Total items: {len(df)}")
     else:
         print("No new files to add to inventory list.")
@@ -326,6 +347,7 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
     # Re-read DF to be sure? No, we have it in memory.
     
     total_rows = len(df)
+    processed_files_in_session = set()
     
     for index, row in df.iterrows():
         # Check for cancellation
@@ -336,6 +358,10 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
         filename = str(row.get("Fichier", ""))
         if not filename: continue
         
+        # Avoid processing the same file multiple times in one run
+        if filename.lower() in processed_files_in_session:
+            continue
+            
         original_path = os.path.join(folder_path, filename)
         
         # Check if needs processing
@@ -354,6 +380,7 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
         
         if is_processed:
             # Already done, skip
+            processed_files_in_session.add(filename.lower())
             continue
             
         if not os.path.exists(original_path):
@@ -363,6 +390,8 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
             continue
 
         # If we are here, we need to process!
+        processed_files_in_session.add(filename.lower())
+        
         if progress_callback:
             # We use index+1 out of total
             progress_callback(index + 1, total_rows, filename)
@@ -513,7 +542,7 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 
         # Save after processing item
-        df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
+        save_dataframe_atomic(df, csv_path)
         
     print(f"\nDone! Inventory count saved to {csv_path}")
     return csv_path
