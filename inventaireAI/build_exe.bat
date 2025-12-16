@@ -41,11 +41,17 @@ if %errorlevel% neq 0 (
 )
 
 echo.
+
+echo [INFO] Copie des fichiers de configuration...
+copy ".env" "dist\.env"
+copy "categories.csv" "dist\categories.csv"
+
+echo.
 echo ===================================
 echo   CONSTRUCTION REUSSIE !
 echo ===================================
 echo L'application se trouve dans le dossier 'dist'.
 echo.
-echo Vous pouvez maintenant copier 'InventaireAI.exe' et votre fichier '.env'.
+echo L'executable et les fichiers de configuration sont prets.
 echo.
 pause
