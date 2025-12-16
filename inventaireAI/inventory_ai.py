@@ -5,7 +5,14 @@ from PIL import Image
 import json
 import io
 
-load_dotenv()
+import sys
+
+# Load .env correctly if frozen
+if getattr(sys, 'frozen', False):
+    base_path = os.path.dirname(sys.executable)
+    load_dotenv(os.path.join(base_path, ".env"))
+else:
+    load_dotenv()
 
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
@@ -22,7 +29,14 @@ def load_categories(csv_path="categories.csv"):
     categories_text = ""
     try:
         # Determine absolute path relative to this script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # Determine absolute path relative to this script or exe
+        if getattr(sys, 'frozen', False):
+             # If frozen, "categories.csv" should be next to the exe, or inside internal folder if bundled?
+             # Assuming user wants to edit it, we look next to exe.
+             script_dir = os.path.dirname(sys.executable)
+        else:
+             script_dir = os.path.dirname(os.path.abspath(__file__))
+             
         file_path = os.path.join(script_dir, csv_path)
 
         with open(file_path, 'r', encoding='utf-8') as f:

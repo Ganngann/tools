@@ -141,8 +141,7 @@ def main():
     parser.add_argument("--target", "-t", help="Optional: Description of specific elements to count (e.g., 'vis', 'voitures rouges').")
     args = parser.parse_args()
 
-    input_path = args.folder
-    target_element = args.target
+def process_inventory(input_path, target_element=None, progress_callback=None):
     valid_extensions = ('.jpg', '.jpeg', '.png', '.webp')
 
     # Determine mode: Folder, Zip, or Single File
@@ -157,7 +156,7 @@ def main():
             mode = "single_file"
         else:
             print(f"Error: File '{input_path}' is not a directory, a zip file, or a supported image.")
-            return
+            return None
 
     if mode == "zip":
         print(f"Zip file detected: {input_path}")
@@ -171,7 +170,7 @@ def main():
                 print(f"Existing folder found. Backed up to: {backup_path}")
             except OSError as e:
                 print(f"Error backing up existing folder: {e}")
-                return
+                return None
 
         try:
             with zipfile.ZipFile(input_path, 'r') as zip_ref:
@@ -205,10 +204,10 @@ def main():
 
         except zipfile.BadZipFile:
             print("Error: The file is not a valid zip file.")
-            return
+            return None
         except Exception as e:
             print(f"Error extracting zip file: {e}")
-            return
+            return None
 
     if mode == "single_file":
         folder_path = os.path.dirname(os.path.abspath(input_path))
@@ -218,7 +217,7 @@ def main():
         # Folder mode (or extracted zip)
         if not os.path.isdir(folder_path):
             print(f"Error: Directory '{folder_path}' not found.")
-            return
+            return None
 
         # Get list of image files
         images = [f for f in os.listdir(folder_path) if f.lower().endswith(valid_extensions)]
@@ -226,7 +225,7 @@ def main():
 
     if not images:
         print("No images found to process.")
-        return
+        return None
 
     print(f"Found {len(images)} images. Starting processing...")
     if target_element:
@@ -240,6 +239,9 @@ def main():
     categories_context = load_categories()
 
     for index, filename in enumerate(images, start=1):
+        if progress_callback:
+            progress_callback(index, len(images), filename)
+            
         original_path = os.path.join(folder_path, filename)
 
         print(f"Processing [{index}/{len(images)}]: {filename}...")
@@ -265,48 +267,8 @@ def main():
         if low_confidence_items:
             print(f"  Warning: {len(low_confidence_items)} objects have low confidence (< {RELIABILITY_THRESHOLD})")
 
-            if LOW_CONFIDENCE_ACTION == "ask":
-                # Interactive mode
-                try:
-                    # Show preview
-                    try:
-                        with Image.open(original_path) as img_preview:
-                             img_preview.show()
-                    except Exception as e:
-                        print(f"  Could not display image: {e}")
-
-                    # List items
-                    print("  Low confidence items:")
-                    for i, item in enumerate(low_confidence_items):
-                        print(f"    - {item.get('nom')} (Qty: {item.get('quantite')}, Score: {item.get('fiabilite')})")
-
-                    user_input = input("  [ENTER] Accept, [m] Move to Manual Review, or type a HINT to re-analyze: ").strip()
-
-                    if user_input.lower() == 'm':
-                        action_taken = "move"
-                    elif user_input == "":
-                        action_taken = "proceed"
-                    else:
-                        # User provided a hint, re-analyze
-                        print(f"  Re-analyzing with hint: '{user_input}'...")
-                        results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True, user_hint=user_input)
-                        if not isinstance(results, list):
-                            results = [results]
-
-                        # Re-check reliability just for display
-                        new_low_conf = [item for item in results if int(item.get("fiabilite", 0)) < RELIABILITY_THRESHOLD]
-                        if new_low_conf:
-                             print(f"  Still {len(new_low_conf)} items with low confidence.")
-                        else:
-                             print(f"  All items now above threshold.")
-
-                        action_taken = "proceed"
-
-                except EOFError:
-                    print("  Non-interactive mode detected, defaulting to move.")
-                    action_taken = "move"
-
-            elif LOW_CONFIDENCE_ACTION == "move":
+            # SKIP ASK MODE FOR GUI AUTOMATION
+            if LOW_CONFIDENCE_ACTION == "move" or LOW_CONFIDENCE_ACTION == "ask":
                 action_taken = "move"
 
         if action_taken == "move":
@@ -465,6 +427,15 @@ def main():
 
     df.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR)
     print(f"\nDone! Inventory count saved to {csv_path}")
+    return csv_path
+
+def main():
+    parser = argparse.ArgumentParser(description="Automate inventory counting from images.")
+    parser.add_argument("folder", help="Path to the folder containing images, a zip file, or a single image file")
+    parser.add_argument("--target", "-t", help="Optional: Description of specific elements to count (e.g., 'vis', 'voitures rouges').")
+    args = parser.parse_args()
+
+    process_inventory(args.folder, args.target)
 
 if __name__ == "__main__":
     main()

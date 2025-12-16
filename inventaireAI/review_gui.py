@@ -135,7 +135,7 @@ class ReviewApp:
         
         self.create_field("Commentaire") # Add Commentaire field
         self.create_field("ID", readonly=True)
-        self.create_field("Fichier Original", readonly=True)
+        self.create_field("Fichier", readonly=True)
         self.create_field("Categorie")
         self.create_field("Nom")
         self.create_field("Etat") # Should be dropdown really, but entry ok
@@ -207,11 +207,14 @@ class ReviewApp:
             entry.config(state="normal")
             entry.delete(0, tk.END)
             entry.insert(0, str(val))
-            if field in ["ID", "Fichier Original", "Fiabilite"]:
+            if field in ["ID", "Fichier", "Fichier Original", "Fiabilite"]:
                 entry.config(state="readonly")
 
         # Load Image
         filename = row.get("Fichier Original", "")
+        if not filename:
+            filename = row.get("Fichier", "")
+            
         if filename:
             image_path = os.path.join(self.processed_dir, str(filename))
             if not os.path.exists(image_path):
@@ -237,6 +240,12 @@ class ReviewApp:
             # Simple maintaining aspect ratio
             win_height = self.root.winfo_height()
             win_width = self.root.winfo_width() // 2
+            
+            # Fallback if window not rendered yet
+            if win_height <= 1 or win_width <= 1:
+                win_height = 800
+                win_width = 600
+                
             img.thumbnail((win_width, win_height))
             
             self.tk_img = ImageTk.PhotoImage(img)
