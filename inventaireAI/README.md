@@ -49,17 +49,43 @@ Il y a deux façons de lancer l'inventaire :
     *   Une ligne est ajoutée immédiatement au fichier CSV (créé dans le dossier racine des images).
 4.  **Interruption** : Vous pouvez arrêter le script (Ctrl+C) à tout moment. Pour reprendre, relancez simplement le script sur le même dossier : il ignorera les images déjà dans `traitees` et continuera le travail.
 
+## Outil de Révision (Correction Manuelle)
+
+Une interface graphique est incluse pour vérifier et corriger l'inventaire facilement.
+
+1.  **Lancement** :
+    *   Glissez-déposez votre fichier `inventaire_final_....csv` sur le fichier **`review.bat`**.
+2.  **Fonctionnalités** :
+    *   **Visualisation** : Affiche l'image de l'objet à côté des données extraites.
+    *   **Correction** : Modifiez n'importe quel champ (Nom, Quantité, Prix, etc.).
+    *   **Rotation** : Si une image est mal orientée, cliquez sur "Pivoter" (sauvegarde immédiate).
+    *   **Rescan IA** : Si l'IA s'est trompée, cliquez sur "Rescan", donnez un indice (ex: "C'est une lampe"), et l'IA réanalysera l'image.
+    *   **Scan Multi** : Si une image contient plusieurs objets, utilisez "Scan Multi" pour les détecter et créer des lignes séparées.
+    *   **À Refaire** : Marque l'image pour être reprise plus tard (déplace le fichier dans `a_refaire` et le retire du CSV).
+    *   **Valider** : Confirme que la ligne est correcte (passe sa fiabilité à 100%).
+
 ## Créer un Exécutable (.exe)
 
-Pour utiliser ce programme sur un ordinateur sans Python (Windows), vous pouvez créer un fichier `.exe` autonome via PyInstaller.
+Pour utiliser ce programme sur un ordinateur sans Python, utilisez le script de construction automatique :
 
-1.  Installez PyInstaller :
-    ```bash
-    pip install pyinstaller
-    ```
-2.  Générez l'exécutable :
-    ```bash
-    pyinstaller --onefile --name "InventaireIA" main.py
-    ```
-3.  Le fichier `InventaireIA.exe` se trouvera dans le dossier `dist`.
-    *   **Attention** : Pour que l'exécutable fonctionne, il doit avoir accès au fichier `.env` (pour la clé API) et au fichier `categories.csv`.
+1.  Double-cliquez sur **`build_exe.bat`**.
+2.  Attendez que la console indique "CONSTRUCTION REUSSIE".
+3.  Le dossier **`dist`** contiendra votre application `InventaireIA.exe` prête à l'emploi.
+    *   Le script copie automatiquement votre fichier `.env` actuel et `categories.csv` dans le dossier `dist`.
+    *   Vous pouvez déplacer le dossier `dist` (renommez-le si vous voulez) sur un autre PC.
+
+## Utilisation de l'Application Portable (.exe)
+
+Une fois l'exécutable généré (voir ci-dessus), vous pouvez l'utiliser sur n'importe quel PC Windows, même sans Python installé.
+
+1.  **Structure du dossier** :
+    Assurez-vous que le fichier `.exe` est toujours accompagné des fichiers suivants dans le même dossier :
+    *   `.env` (Votre clé API)
+    *   `categories.csv` (Vos catégories)
+
+2.  **Lancement** :
+    Double-cliquez sur `InventaireIA.exe` pour ouvrir le **Launcher**.
+
+3.  **Fonctionnalités** :
+    *   **🆕 Nouvel Inventaire** : Cliquez sur ce bouton pour sélectionner un dossier de photos. Une barre de progression s'affichera pendant que l'IA analyse vos images.
+    *   **🛠️ Réviser / Corriger** : Cliquez sur ce bouton pour ouvrir un fichier CSV existant et lancer l'interface de correction (voir section "Outil de Révision").
