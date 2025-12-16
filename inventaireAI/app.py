@@ -11,6 +11,7 @@ if getattr(sys, 'frozen', False):
 
 from counter import process_inventory
 from review_gui import ReviewApp
+from ui_utils import ToolTip
 
 class LauncherApp:
     def __init__(self, root):
@@ -40,7 +41,7 @@ class LauncherApp:
         btn_frame = tk.Frame(root, bg="#f0f2f5", pady=20)
         btn_frame.pack(expand=True)
 
-from ui_utils import ToolTip
+
 
         self.btn_scan = ttk.Button(btn_frame, text="🆕 Nouvel Inventaire\n(Scanner des photos)", style="Big.TButton", command=self.start_new_inventory)
         self.btn_scan.pack(fill="x", pady=10, ipadx=50)

@@ -30,6 +30,10 @@ pyinstaller --noconfirm --onefile --windowed --name "InventaireAI" ^
     --hidden-import=pandas ^
     --hidden-import=PIL ^
     --hidden-import=tkinter ^
+    --hidden-import=counter ^
+    --hidden-import=review_gui ^
+    --hidden-import=inventory_ai ^
+    --hidden-import=ui_utils ^
     --collect-all=tcl ^
     --collect-all=tk ^
     app.py
