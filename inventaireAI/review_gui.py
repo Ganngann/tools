@@ -304,15 +304,17 @@ class ReviewApp:
             
             # Simple approach: 
             # 50-70: Red fading out, Green fading in
-            if score < 70:
-                # Orange zone
-                return "#ffeeba" # Light Orange/Yellow
+            # Gradient simulation with steps
+            if score < 60:
+                return "#ffe5d9" # Red-Orange
+            elif score < 75:
+                 return "#fff3cd" # Yellow
+            elif score < 90:
+                 return "#d4edda" # Pale Green
             else:
-                 # Yellow-Green zone
-                return "#e2e6ea" # Neutral/Light Grey? No, user wants gradient.
-                # Let's use a fixed set for simplicity and readability
-                # > 70 is decent.
-                return "#d4edda" # Pale Green (Bootstrap success) but not full green
+                 return "#ccffcc" # Full Green (covered by >=90 check above?)
+                 # The >=90 check is above, so this block is for 50 <= score < 90.
+                 # So < 90 covers everything remaining.
 
     def show_current_item(self):
         # Reset rotation for new item
