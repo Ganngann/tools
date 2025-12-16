@@ -61,9 +61,11 @@ class ReviewApp:
                      self.df[col] = self.df[col].astype(str).str.replace(',', '.', regex=False)
                      self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0.0)
             
-            # Ensure Commentaire column exists
+            # Ensure Commentaire column exists and handle NaNs
             if "Commentaire" not in self.df.columns:
                 self.df["Commentaire"] = ""
+            else:
+                self.df["Commentaire"] = self.df["Commentaire"].fillna("")
             
             # Filter items to review: Reliability < 100
             # Sort by reliability ascending (lowest confidence first)
@@ -191,6 +193,7 @@ class ReviewApp:
         # Fill fields
         for field, entry in self.fields.items():
             val = row.get(field, "")
+            if pd.isna(val): val = ""
             entry.config(state="normal")
             entry.delete(0, tk.END)
             entry.insert(0, str(val))
