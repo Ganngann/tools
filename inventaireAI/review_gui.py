@@ -103,11 +103,33 @@ class ReviewApp:
 
     def save_data(self):
         try:
-            # Recalculate totals if needed
-            self.df.to_csv(self.csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
-            print("Sauvegarde effectuée.")
+            # Atomic Save Strategy
+            # 1. Write to a temporary file
+            # 2. Rename temporary file to actual file (atomic replace)
+            
+            temp_path = self.csv_path + ".tmp"
+            
+            # Recalculate totals if needed (optional logic from before)
+            # self.df (already updated in memory)
+            
+            self.df.to_csv(temp_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
+            
+            # Atomic replace
+            if os.path.exists(temp_path):
+                try:
+                    os.replace(temp_path, self.csv_path)
+                    print("Sauvegarde effectuée (Atomic).")
+                except OSError as e:
+                    # Windows might fail replace if file is locked?
+                    # Retry with remove + rename
+                    print(f"Atomic replace failed ({e}), trying remove+rename...")
+                    if os.path.exists(self.csv_path):
+                        os.remove(self.csv_path)
+                    os.rename(temp_path, self.csv_path)
+                    print("Sauvegarde effectuée (Fallback).")
+                    
         except Exception as e:
-            messagebox.showerror("Erreur de sauvegarde", f"{e}")
+            messagebox.showerror("Erreur de sauvegarde", f"GRAVE: Impossible de sauvegarder !\n{e}")
 
     def setup_ui(self):
         # Layout: Left side for Image, Right side for Form
@@ -426,13 +448,25 @@ class ReviewApp:
     def delete_item(self):
         if messagebox.askyesno("Confirmer", "Voulez-vous vraiment supprimer cette ligne de l'inventaire ?"):
             idx = self.review_queue[self.current_index]
-            self.df = self.df.drop(idx)
-            self.save_data()
             
-            # Adjust queue issues since index is gone?
-            # Actually safely we just move on, next time loaded it's gone
-            # But for current session display:
-            self.next_item()
+            try:
+                self.df = self.df.drop(idx)
+                
+                # Remove from queue to avoid KeyError on navigation
+                if idx in self.review_queue:
+                    self.review_queue.remove(idx)
+                
+                # Adjust current index
+                if self.current_index >= len(self.review_queue):
+                    self.current_index = len(self.review_queue) - 1
+                if self.current_index < 0:
+                    self.current_index = 0
+                    
+                self.save_data()
+                self.show_current_item()
+                
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Erreur lors de la suppression: {e}")
 
     def prev_item(self):
         if self.current_index > 0:
@@ -599,44 +633,76 @@ class ReviewApp:
     def mark_as_retake(self):
         if self.current_index >= len(self.review_queue): return
         
-        idx = self.review_queue[self.current_index]
+        current_idx = self.review_queue[self.current_index]
+        
         if not self.current_image_path or not os.path.exists(self.current_image_path):
              messagebox.showwarning("Attention", "Pas d'image trouvée à déplacer.")
-             # Still allow flagging in CSV?
-             # Let's clean CSV just in case
+             # Proceed to delete row anyway? Yes.
         
         try:
-            # Move File
+            filename = None
+            if self.current_image_path:
+                 filename = os.path.basename(self.current_image_path)
+            
+            # Identify ALL rows to delete (sharing this image)
+            indices_to_drop = [current_idx] 
+            if filename:
+                 if "Fichier Original" in self.df.columns:
+                     indices_to_drop = self.df[self.df["Fichier Original"] == filename].index.tolist()
+                 elif "Fichier" in self.df.columns:
+                     indices_to_drop = self.df[self.df["Fichier"] == filename].index.tolist()
+
+            # Handle File Operation (MOVE)
             if self.current_image_path and os.path.exists(self.current_image_path):
                  retake_dir = os.path.join(self.folder_path, RETAKE_FOLDER_NAME)
                  if not os.path.exists(retake_dir):
                      os.makedirs(retake_dir)
                  
-                 filename = os.path.basename(self.current_image_path)
                  dest_path = os.path.join(retake_dir, filename)
                  
-                 # Handle collisions
+                 # Handle collisions in destination
                  if os.path.exists(dest_path):
                       base, ext = os.path.splitext(filename)
                       import time
                       dest_path = os.path.join(retake_dir, f"{base}_{int(time.time())}{ext}")
                  
                  shutil.move(self.current_image_path, dest_path)
-                 print(f"Moved to retake: {dest_path}")
-                 self.current_image_path = None # It's gone
-            
+                 print(f"Moved image to retake (cleaning all {len(indices_to_drop)} rows): {dest_path}")
+                 self.current_image_path = None # Gone
+
             # Delete from CSV
-            self.df = self.df.drop(idx)
-            
+            if indices_to_drop:
+                self.df = self.df.drop(indices_to_drop)
+                
+                # Update queue: remove any indices that were just dropped
+                # We need to filter self.review_queue
+                self.review_queue = [i for i in self.review_queue if i not in indices_to_drop]
+                
+                # Adjust current index if needed. 
+                # If we deleted the current item, self.current_index now points to the *next* item 
+                # (because the list shifted left, or rather the list content changed).
+                # Wait, review_queue is list of INDICES. 
+                # If we remove item at pos X, item at pos X+1 moves to X.
+                # So self.current_index is largely still valid (pointing to new item at that slot),
+                # unless we were at the end.
+                
+                if self.current_index >= len(self.review_queue):
+                    self.current_index = len(self.review_queue) - 1
+                if self.current_index < 0:
+                    self.current_index = 0
+
             self.save_data()
-            self.next_item()
+            self.show_current_item()
             
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors du marquage à refaire: {e}")
 
     def next_item(self):
-        self.current_index += 1
-        self.show_current_item()
+        if self.current_index < len(self.review_queue) - 1:
+            self.current_index += 1
+            self.show_current_item()
+        else:
+            messagebox.showinfo("Info", "Vous êtes au bout de la liste.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Review inventory items.")
