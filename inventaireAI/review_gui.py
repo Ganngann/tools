@@ -1,9 +1,10 @@
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
 import pandas as pd
 import argparse
+import ast
 from inventory_ai import analyze_image, analyze_image_multiple, load_categories
 from dotenv import load_dotenv
 import shutil
@@ -367,7 +368,20 @@ class ReviewApp:
             if os.path.exists(image_path):
                 print(f"Loading image: {image_path}")
                 self.current_image_path = image_path # Store for rotation/rescan
-                self.display_image(image_path)
+
+                # Get Box 2D if available
+                box_2d = None
+                if "Box 2D" in row and pd.notna(row["Box 2D"]):
+                    try:
+                        val = row["Box 2D"]
+                        if isinstance(val, str):
+                            box_2d = ast.literal_eval(val)
+                        elif isinstance(val, list):
+                            box_2d = val
+                    except:
+                        pass
+
+                self.display_image(image_path, box_2d)
             else:
                 print(f"Image not found at: {image_path}")
                 self.current_image_path = None
@@ -376,10 +390,20 @@ class ReviewApp:
             self.current_image_path = None
             self.display_placeholder("Pas de nom de fichier dans le CSV")
 
-    def display_image(self, path):
+    def display_image(self, path, box_2d=None):
         try:
             img = Image.open(path)
             
+            # Draw box if available BEFORE thumbnailing (or after, but easier to draw on original then resize?
+            # Actually better to draw on original so lines scale or draw after?
+            # Drawing on original: lines will get thinner when downscaling.
+            # Drawing after: Need to transform coordinates.
+
+            # Transform coordinates strategy:
+            # box_2d is [ymin, xmin, ymax, xmax] normalized to 1000.
+
+            # Let's resize first for display, then draw.
+
             # Simple maintaining aspect ratio
             win_height = self.root.winfo_height()
             win_width = self.root.winfo_width() // 2
@@ -389,9 +413,30 @@ class ReviewApp:
                 win_height = 800
                 win_width = 600
                 
-            img.thumbnail((win_width, win_height))
+            # Use copy to not affect original image object if we were keeping it
+            img_disp = img.copy()
+            img_disp.thumbnail((win_width, win_height))
+
+            if box_2d and isinstance(box_2d, list) and len(box_2d) == 4:
+                try:
+                    ymin, xmin, ymax, xmax = box_2d
+
+                    # Normalized 0-1000
+                    # image dimensions
+                    width, height = img_disp.size
+
+                    left = (xmin / 1000) * width
+                    top = (ymin / 1000) * height
+                    right = (xmax / 1000) * width
+                    bottom = (ymax / 1000) * height
+
+                    draw = ImageDraw.Draw(img_disp)
+                    # Red thin rectangle
+                    draw.rectangle([left, top, right, bottom], outline="red", width=2)
+                except Exception as e:
+                    print(f"Error drawing box: {e}")
             
-            self.tk_img = ImageTk.PhotoImage(img)
+            self.tk_img = ImageTk.PhotoImage(img_disp)
             self.image_label.config(image=self.tk_img, text="")
         except Exception as e:
             self.display_placeholder(f"Erreur image: {e}")

@@ -266,7 +266,7 @@ def main():
     desired_known_order = [
          "ID", "Fichier Original", "Image", "Categorie", "Categorie ID", "Fiabilite",
          "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
-         "Nom", "Etat", "Quantite", "Remarques", "Remarques traitées"
+         "Nom", "Etat", "Quantite", "Box 2D", "Remarques", "Remarques traitées"
     ]
     custom_cols = []
     if ADDITIONAL_CSV_COLUMNS:
@@ -467,6 +467,7 @@ def main():
             "Prix Unitaire": prix_unitaire,
             "Prix Neuf Estime": prix_neuf,
             "Prix Total": prix_total,
+            "Box 2D": result.get("box_2d", ""),
             "Remarques": "",
             "Remarques traitées": ""
         }

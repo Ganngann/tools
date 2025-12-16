@@ -261,7 +261,7 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
     desired_known_order = [
         "ID", "Fichier", "Image", "Categorie", "Categorie ID", "Fiabilite",
         "Prix Unitaire", "Prix Neuf Estime", "Prix Total",
-        "Nom", "Etat", "Quantite"
+        "Nom", "Etat", "Quantite", "Box 2D"
     ]
     custom_cols = []
     if ADDITIONAL_CSV_COLUMNS:
@@ -507,6 +507,7 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
                 "Prix Unitaire": prix_unitaire,
                 "Prix Neuf Estime": prix_neuf,
                 "Prix Total": prix_total,
+                "Box 2D": item.get("box_2d", ""),
                 "Fichier": new_filename # Update filename if renamed
             }
             if INCLUDE_IMAGE_BASE64:
