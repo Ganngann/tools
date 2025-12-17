@@ -586,9 +586,10 @@ class ReviewApp:
             entry.config(state="normal")
             entry.delete(0, tk.END)
             if field == "Categorie":
-                cat_id = str(val).strip()
-                cat_name = self.category_map.get(cat_id, cat_id)
-                entry.set(cat_name)
+                raw_val = str(val).strip()
+                # Display Name if it's a known ID, otherwise keep existing value (Name or Custom)
+                display_val = self.category_map.get(raw_val, raw_val)
+                entry.set(display_val)
             else:
                 entry.insert(0, str(val))
             if field in ["ID", "Fichier", "Fichier Original", "Fiabilite", "Categorie"]:
@@ -864,6 +865,7 @@ class ReviewApp:
         try:
             self.df.at[idx, "Nom"] = self.get_field_value("Nom")
             cat_name = self.get_field_value("Categorie")
+            # Convert Name -> ID if possible, else preserve value
             cat_id = cat_name
             for cid, cname in self.category_map.items():
                 if cname == cat_name:
