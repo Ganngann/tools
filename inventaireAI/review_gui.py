@@ -90,8 +90,8 @@ class ReviewApp:
             
             if "Fiabilite" in self.df.columns:
                 self.df["Fiabilite"] = pd.to_numeric(self.df["Fiabilite"], errors='coerce').fillna(0)
-                # Filter items with reliability < 100
-                review_candidates = self.df[self.df["Fiabilite"] < 100]
+                # Review everything (including 100% reliable items)
+                review_candidates = self.df
 
                 # Determine which column holds the filename
                 file_col = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
@@ -195,9 +195,13 @@ class ReviewApp:
         self.tools_frame = tk.LabelFrame(self.right_frame, text="Outils & Corrections", padx=10, pady=10)
         self.tools_frame.pack(fill="x", pady=(0, 15))
         
-        self.btn_rotate = tk.Button(self.tools_frame, text="🔄 Pivoter", command=self.rotate_image)
+        self.btn_rotate = tk.Button(self.tools_frame, text="🔄 Pivoter G", command=lambda: self.rotate_image("left"))
         self.btn_rotate.pack(side="left", padx=5)
         ToolTip(self.btn_rotate, "Pivoter l'image de 90° vers la gauche.")
+
+        self.btn_rotate_right = tk.Button(self.tools_frame, text="Pivoter D 🔄", command=lambda: self.rotate_image("right"))
+        self.btn_rotate_right.pack(side="left", padx=5)
+        ToolTip(self.btn_rotate_right, "Pivoter l'image de 90° vers la droite.")
         
         self.chk_boxes = tk.Checkbutton(self.tools_frame, text="Voir tous les carrés", variable=self.show_all_boxes_var, command=lambda: self.display_image(None, self.current_box_2d))
         self.chk_boxes.pack(side="left", padx=5)
@@ -767,12 +771,15 @@ class ReviewApp:
         except Exception as e:
             self.display_placeholder(f"Erreur image: {e}")
 
-    def rotate_image(self):
+    def rotate_image(self, direction="left"):
         if self.current_image_path and os.path.exists(self.current_image_path):
             try:
                 # Rotate the physical image (PIL rotates CCW by default)
+                # left = 90 deg CCW
+                # right = -90 deg CCW
+                angle = 90 if direction == "left" else -90
                 img = Image.open(self.current_image_path)
-                img = img.rotate(90, expand=True)
+                img = img.rotate(angle, expand=True)
                 img.save(self.current_image_path)
 
                 # Rotate Bounding Boxes for ALL items on this image
@@ -791,14 +798,24 @@ class ReviewApp:
 
                             if len(b2d) == 4:
                                 ymin, xmin, ymax, xmax = b2d
-                                # Coordinate Transform for 90 deg CCW in normalized (0-1000) space
-                                # x' = y
-                                # y' = 1000 - x
-
-                                new_ymin = 1000 - xmax
-                                new_xmin = ymin
-                                new_ymax = 1000 - xmin
-                                new_xmax = ymax
+                                # Coordinate Transform in normalized (0-1000) space
+                                
+                                if direction == "left":
+                                    # 90 deg CCW
+                                    # x' = y
+                                    # y' = 1000 - x
+                                    new_ymin = 1000 - xmax
+                                    new_xmin = ymin
+                                    new_ymax = 1000 - xmin
+                                    new_xmax = ymax
+                                else:
+                                    # 90 deg CW (Right)
+                                    # x' = 1000 - y
+                                    # y' = x
+                                    new_ymin = xmin
+                                    new_xmin = 1000 - ymax
+                                    new_ymax = xmax
+                                    new_xmax = 1000 - ymin
 
                                 # Ensure min/max order
                                 final_ymin = min(new_ymin, new_ymax)
@@ -948,10 +965,12 @@ class ReviewApp:
         # Move backward to the PREVIOUS IMAGE in queue
         if self.current_queue_index > 0:
             self.current_queue_index -= 1
-            self.active_df_index = None
-            self.show_current_item()
         else:
-             messagebox.showinfo("Info", "Vous êtes au début de la liste.")
+            # Loop to last
+            self.current_queue_index = len(self.review_queue) - 1
+            
+        self.active_df_index = None
+        self.show_current_item()
 
     def rescan_item(self):
         if not self.current_image_path:
@@ -1267,10 +1286,12 @@ class ReviewApp:
         # Move forward to the NEXT IMAGE in queue
         if self.current_queue_index < len(self.review_queue) - 1:
             self.current_queue_index += 1
-            self.active_df_index = None
-            self.show_current_item()
         else:
-            messagebox.showinfo("Info", "Vous êtes au bout de la liste.")
+            # Loop to first
+            self.current_queue_index = 0
+            
+        self.active_df_index = None
+        self.show_current_item()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Review inventory items.")
