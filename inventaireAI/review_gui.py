@@ -914,6 +914,9 @@ class ReviewApp:
                         new_row["Prix Total"] = q * p
                     except: pass
                     
+                    if "box_2d" in item and item["box_2d"]:
+                        new_row["Box 2D"] = str(item["box_2d"])
+
                     self.df = pd.concat([self.df, pd.DataFrame([new_row])], ignore_index=True)
 
                 current_queue_pos = self.current_queue_index
