@@ -590,15 +590,26 @@ class ReviewApp:
 
             # 1. Draw all other siblings if enabled
             if self.show_all_boxes_var.get() and self.current_image_path:
-                filename = os.path.basename(self.current_image_path)
+                # Resolve filename reliably from DF if possible
+                filename = None
                 col_name = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
+
+                if self.active_df_index is not None:
+                     try:
+                         filename = self.df.at[self.active_df_index, col_name]
+                     except: pass
+
+                if not filename:
+                    filename = os.path.basename(self.current_image_path)
+
                 siblings = self.df[self.df[col_name] == filename]
 
                 current_id = self.df.at[self.active_df_index, "ID"] if self.active_df_index is not None else None
 
                 for idx, row in siblings.iterrows():
                     # Skip current item, draw it last/special
-                    if row.get("ID") == current_id: continue
+                    # Use string comparison to be safe against int/str type mismatches
+                    if str(row.get("ID")) == str(current_id): continue
 
                     s_box = None
                     if "Box 2D" in row and pd.notna(row["Box 2D"]):
@@ -814,7 +825,7 @@ class ReviewApp:
 
             result = analyze_image(target_image_path, categories_context=self.categories_context, user_hint=hint)
             
-            if crop_info and "box_2d" in result:
+            if crop_info and result.get("box_2d") and isinstance(result["box_2d"], list) and len(result["box_2d"]) == 4:
                 local_box = result["box_2d"]
                 crop_x, crop_y, crop_w, crop_h = crop_info
                 orig_w, orig_h = self.original_image_size
@@ -903,6 +914,9 @@ class ReviewApp:
                         new_row["Prix Total"] = q * p
                     except: pass
                     
+                    if "box_2d" in item and item["box_2d"]:
+                        new_row["Box 2D"] = str(item["box_2d"])
+
                     self.df = pd.concat([self.df, pd.DataFrame([new_row])], ignore_index=True)
 
                 current_queue_pos = self.current_queue_index
@@ -912,6 +926,7 @@ class ReviewApp:
                 self.save_data()
                 self._update_sibling_list(current_row_data.get("Fichier Original"), current_row_data.get("ID"))
 
+            self.show_current_item(reload_siblings=True)
             messagebox.showinfo("Succès", f"Analyse terminée !\n\nObjet courant mis à jour.\n{new_rows_count} nouveaux objets ajoutés à la suite.")
 
         except Exception as e:

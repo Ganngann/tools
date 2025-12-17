@@ -106,6 +106,11 @@ def analyze_image(image_path, categories_context=None, user_hint=None, folder_co
             Identify the object and look for any handwritten or printed quantity on a paper next to it.
             Also look for any other text or notes written on the paper (e.g. size, condition, specific details).
             
+            IMPORTANT: Pay special attention to the quantity. For a box of items (e.g., 900 screws), you have two valid choices:
+            1. Unit logic: Quantity = 900, Name = 'Vis' (Screw)
+            2. Box logic: Quantity = 1, Name = 'Boite de 900 vis' (Box of 900 screws)
+            NEVER mix these logics (e.g., Quantity = 900, Name = 'Boite de 900 vis' is FORBIDDEN).
+
             Select the most appropriate category for the object from the following list (CSV format with ID,Nom):
 
             {categories_context}
@@ -253,6 +258,11 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             {hint_text}
             Look for any handwritten or printed quantity on a paper next to objects if present, otherwise count the visible items.
             Also look for any other text or notes written on the paper (e.g. size, condition, specific details).
+
+            IMPORTANT: Pay special attention to the quantity. For a box of items (e.g., 900 screws), you have two valid choices:
+            1. Unit logic: Quantity = 900, Name = 'Vis' (Screw)
+            2. Box logic: Quantity = 1, Name = 'Boite de 900 vis' (Box of 900 screws)
+            NEVER mix these logics (e.g., Quantity = 900, Name = 'Boite de 900 vis' is FORBIDDEN).
 
             Select the most appropriate category for each object from the following list (CSV format with ID,Nom):
 
