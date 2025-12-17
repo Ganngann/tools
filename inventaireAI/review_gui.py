@@ -38,6 +38,9 @@ class ReviewApp:
         self.selection_rect_id = None
         self.current_selection_coords = None # (x1, y1, x2, y2) in canvas pixels
         self.original_image_object = None # Store PIL image for resizing
+        self.current_box_2d = None
+        self.show_all_boxes_var = tk.BooleanVar(value=False)
+        self.box_map = {} # canvas_id -> df_id
 
         # Load AI Context
         self.categories_context = load_categories() if load_categories else None
@@ -144,20 +147,23 @@ class ReviewApp:
         lbl_siblings = tk.Label(self.sibling_frame, text="Objets détectés dans la même image :", font=("Arial", 10, "bold"), bg="#f0f0f0")
         lbl_siblings.pack(anchor="w", padx=5, pady=2)
 
-        cols = ("ID", "Nom", "Qte", "Etat")
+        cols = ("ID", "Nom", "Qte", "Etat", "Fiab")
         self.sibling_tree = ttk.Treeview(self.sibling_frame, columns=cols, show='headings', selectmode="browse")
         self.sibling_tree.heading("ID", text="ID")
         self.sibling_tree.heading("Nom", text="Nom")
         self.sibling_tree.heading("Qte", text="Qté")
         self.sibling_tree.heading("Etat", text="État")
+        self.sibling_tree.heading("Fiab", text="Fiab.")
 
         self.sibling_tree.column("ID", width=40, anchor="center")
-        self.sibling_tree.column("Nom", width=200, anchor="w")
+        self.sibling_tree.column("Nom", width=160, anchor="w")
         self.sibling_tree.column("Qte", width=40, anchor="center")
         self.sibling_tree.column("Etat", width=80, anchor="center")
+        self.sibling_tree.column("Fiab", width=50, anchor="center")
 
         # Bind Selection Event
         self.sibling_tree.bind("<<TreeviewSelect>>", self.on_sibling_select)
+        self.sibling_tree.bind("<Motion>", self.on_tree_hover)
 
         vsb = ttk.Scrollbar(self.sibling_frame, orient="vertical", command=self.sibling_tree.yview)
         self.sibling_tree.configure(yscrollcommand=vsb.set)
@@ -181,6 +187,9 @@ class ReviewApp:
         self.btn_rotate.pack(side="left", padx=5)
         ToolTip(self.btn_rotate, "Pivoter l'image de 90° vers la gauche.")
         
+        self.chk_boxes = tk.Checkbutton(self.tools_frame, text="Voir tous les carrés", variable=self.show_all_boxes_var, command=lambda: self.display_image(None, self.current_box_2d))
+        self.chk_boxes.pack(side="left", padx=5)
+
         self.btn_rescan = tk.Button(self.tools_frame, text="🧠 Rescan (Zone)", bg="#e2e6ea", command=self.rescan_item)
         self.btn_rescan.pack(side="left", padx=5)
         ToolTip(self.btn_rescan, "Relancer l'IA.\nSi vous avez dessiné un carré rouge, l'IA analysera UNIQUEMENT cette zone.\nSinon, elle re-scanne toute l'image.")
@@ -268,6 +277,58 @@ class ReviewApp:
                 self.image_canvas.delete(self.selection_rect_id)
                 self.selection_rect_id = None
                 self.current_selection_coords = None
+
+    # --- Hover Handling ---
+    def on_box_enter(self, item_id):
+        # Highlight in tree
+        for item in self.sibling_tree.get_children():
+            vals = self.sibling_tree.item(item, 'values')
+            if str(vals[0]) == str(item_id):
+                # We use a tag to highlight
+                self.sibling_tree.item(item, tags=("current", "hovered"))
+                break
+
+    def on_box_leave(self, event):
+        # Restore tags
+        current_id = self.df.at[self.active_df_index, "ID"] if self.active_df_index is not None else None
+        for item in self.sibling_tree.get_children():
+            vals = self.sibling_tree.item(item, 'values')
+            if str(vals[0]) == str(current_id):
+                 self.sibling_tree.item(item, tags=("current",))
+            else:
+                 self.sibling_tree.item(item, tags=())
+
+    def on_tree_hover(self, event):
+        item_id = self.sibling_tree.identify_row(event.y)
+        if hasattr(self, '_last_hovered_item') and self._last_hovered_item == item_id:
+            return
+        self._last_hovered_item = item_id
+
+        # Reset canvas boxes first
+        for rect_id in self.box_map:
+             # Check if it's the active one
+             linked_id = self.box_map[rect_id]
+             current_id = self.df.at[self.active_df_index, "ID"] if self.active_df_index is not None else None
+             if str(linked_id) == str(current_id):
+                 self.image_canvas.itemconfig(rect_id, width=3, outline="#00ff00")
+             else:
+                 self.image_canvas.itemconfig(rect_id, width=1, outline="blue")
+
+        if not item_id: return
+        vals = self.sibling_tree.item(item_id, 'values')
+        if not vals: return
+
+        obj_id = vals[0]
+
+        # Highlight box on canvas
+        target_rect = None
+        for rect_id, linked_id in self.box_map.items():
+            if str(linked_id) == str(obj_id):
+                target_rect = rect_id
+                break
+
+        if target_rect:
+             self.image_canvas.itemconfig(target_rect, width=4, outline="yellow")
 
     # --- Resize Handling ---
     def on_canvas_resize(self, event):
@@ -444,7 +505,8 @@ class ReviewApp:
                 s_row.get("ID", ""),
                 s_row.get("Nom", ""),
                 s_row.get("Quantite", ""),
-                s_row.get("Etat", "")
+                s_row.get("Etat", ""),
+                s_row.get("Fiabilite", "")
             )
             item_id = self.sibling_tree.insert("", "end", values=values)
             if str(s_row.get("ID")) == str(current_id):
@@ -453,6 +515,7 @@ class ReviewApp:
                 self.sibling_tree.item(item_id, tags=("current",))
 
         self.sibling_tree.tag_configure("current", background="#d4edda")
+        self.sibling_tree.tag_configure("hovered", background="#e2e6ea")
 
     def _highlight_sibling(self, current_id):
         # Update selection without rebuilding tree
@@ -504,16 +567,54 @@ class ReviewApp:
             self.img_offset_x = x_center - (new_width // 2)
             self.img_offset_y = y_center - (new_height // 2)
             self.img_display_size = (new_width, new_height)
+            self.box_map = {} # Reset map
 
-            if box_2d and isinstance(box_2d, list) and len(box_2d) == 4:
-                try:
-                    ymin, xmin, ymax, xmax = box_2d
-                    left = (xmin / 1000) * new_width + self.img_offset_x
-                    top = (ymin / 1000) * new_height + self.img_offset_y
-                    right = (xmax / 1000) * new_width + self.img_offset_x
-                    bottom = (ymax / 1000) * new_height + self.img_offset_y
-                    self.image_canvas.create_rectangle(left, top, right, bottom, outline="#00ff00", width=2, dash=(5, 5))
-                except Exception: pass
+            # Helper to draw box
+            def draw_box(b2d, color, width, dash=None, item_id=None):
+                if b2d and isinstance(b2d, list) and len(b2d) == 4:
+                    try:
+                        ymin, xmin, ymax, xmax = b2d
+                        left = (xmin / 1000) * new_width + self.img_offset_x
+                        top = (ymin / 1000) * new_height + self.img_offset_y
+                        right = (xmax / 1000) * new_width + self.img_offset_x
+                        bottom = (ymax / 1000) * new_height + self.img_offset_y
+                        rect_id = self.image_canvas.create_rectangle(left, top, right, bottom, outline=color, width=width, dash=dash)
+                        if item_id is not None:
+                            self.box_map[rect_id] = item_id
+                            # Bind hover events to this rectangle
+                            self.image_canvas.tag_bind(rect_id, "<Enter>", lambda e, i=item_id: self.on_box_enter(i))
+                            self.image_canvas.tag_bind(rect_id, "<Leave>", self.on_box_leave)
+                        return rect_id
+                    except Exception: pass
+                return None
+
+            # 1. Draw all other siblings if enabled
+            if self.show_all_boxes_var.get() and self.current_image_path:
+                filename = os.path.basename(self.current_image_path)
+                col_name = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
+                siblings = self.df[self.df[col_name] == filename]
+
+                current_id = self.df.at[self.active_df_index, "ID"] if self.active_df_index is not None else None
+
+                for idx, row in siblings.iterrows():
+                    # Skip current item, draw it last/special
+                    if row.get("ID") == current_id: continue
+
+                    s_box = None
+                    if "Box 2D" in row and pd.notna(row["Box 2D"]):
+                         try:
+                            val = row["Box 2D"]
+                            if isinstance(val, str): s_box = ast.literal_eval(val)
+                            elif isinstance(val, list): s_box = val
+                         except: pass
+
+                    if s_box:
+                        draw_box(s_box, "blue", 1, None, row.get("ID"))
+
+            # 2. Draw current item box
+            if box_2d:
+                current_id = self.df.at[self.active_df_index, "ID"] if self.active_df_index is not None else None
+                draw_box(box_2d, "#00ff00", 3, (5, 5), current_id)
             
         except Exception as e:
             self.display_placeholder(f"Erreur image: {e}")
@@ -584,36 +685,83 @@ class ReviewApp:
             messagebox.showerror("Erreur", f"Erreur lors de la validation: {e}")
 
     def delete_item(self):
-        if messagebox.askyesno("Confirmer", "Voulez-vous vraiment supprimer cette ligne de l'inventaire ?"):
-            idx = self.active_df_index
+        idx = self.active_df_index
+        if idx is None: return
+
+        # Check for siblings
+        col_name = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
+        filename = self.df.at[idx, col_name]
+        siblings = self.df[self.df[col_name] == filename]
+
+        is_last = len(siblings) <= 1
+
+        msg = "Voulez-vous vraiment supprimer cette ligne de l'inventaire ?"
+        if is_last:
+            msg = "ATTENTION : C'est le dernier objet de cette image.\nSi vous le supprimez, l'image sera considérée comme vide/traitée.\n\nVoulez-vous supprimer ?"
+
+        should_delete = True
+        if is_last:
+             should_delete = messagebox.askyesno("Confirmer", msg)
+
+        if should_delete:
             try:
                 self.df = self.df.drop(idx)
                 if idx in self.review_queue:
                     self.review_queue.remove(idx)
                 
-                # Logic for "next" after delete:
-                # If we were in queue, current_queue_index is now pointing to next item (because list shifted)
-                # But we need to update active_df_index.
-
-                self.active_df_index = None # Force reset from queue
-
-                if self.current_queue_index >= len(self.review_queue):
-                    self.current_queue_index = len(self.review_queue) - 1
-                if self.current_queue_index < 0:
-                    self.current_queue_index = 0
-                    
                 self.save_data()
-                self.show_current_item()
+
+                # Logic for what to show next
+                if is_last:
+                    # No siblings left, go to next image (queue logic)
+                    self.active_df_index = None
+                    # Fix queue index if it shifted
+                    if self.current_queue_index >= len(self.review_queue):
+                        self.current_queue_index = max(0, len(self.review_queue) - 1)
+                    self.show_current_item()
+                else:
+                    # Siblings exist, switch to one of them
+                    remaining = self.df[self.df[col_name] == filename]
+                    if not remaining.empty:
+                        self.active_df_index = remaining.index[0]
+                        # We stay on same image, so queue index doesn't change relative to 'files',
+                        # but we need to ensure we don't drift if the deleted item was the queue pointer.
+                        if self.active_df_index in self.review_queue:
+                            self.current_queue_index = self.review_queue.index(self.active_df_index)
+
+                        self.show_current_item(reload_siblings=True)
+                    else:
+                        self.active_df_index = None
+                        self.show_current_item()
+
             except Exception as e:
                 messagebox.showerror("Erreur", f"Erreur lors de la suppression: {e}")
 
     def prev_item(self):
+        # Move backward to the PREVIOUS IMAGE in queue
         if self.current_queue_index > 0:
-            self.current_queue_index -= 1
-            self.active_df_index = None # Reset to let show_current_item pick from queue
-            self.show_current_item()
+            # Get current file
+            current_idx = self.review_queue[self.current_queue_index]
+            col_name = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
+            current_file = self.df.at[current_idx, col_name]
+
+            # Find prev index with DIFFERENT file
+            found_prev = False
+            for i in range(self.current_queue_index - 1, -1, -1):
+                idx = self.review_queue[i]
+                fname = self.df.at[idx, col_name]
+                if fname != current_file:
+                    self.current_queue_index = i
+                    found_prev = True
+                    break
+
+            if found_prev:
+                self.active_df_index = None
+                self.show_current_item()
+            else:
+                messagebox.showinfo("Info", "Vous êtes au début de la liste (ou pas d'autre image précédente).")
         else:
-            messagebox.showinfo("Info", "Vous êtes au début de la liste.")
+             messagebox.showinfo("Info", "Vous êtes au début de la liste.")
 
     def rescan_item(self):
         if not self.current_image_path:
@@ -915,11 +1063,27 @@ class ReviewApp:
             messagebox.showerror("Erreur", f"Erreur lors du marquage à refaire: {e}")
 
     def next_item(self):
-        # Move forward in queue
-        if self.current_queue_index < len(self.review_queue) - 1:
-            self.current_queue_index += 1
-            self.active_df_index = None # Reset so it pulls from queue
-            self.show_current_item()
+        # Move forward to the NEXT IMAGE in queue
+        if self.current_queue_index < len(self.review_queue):
+             current_idx = self.review_queue[self.current_queue_index]
+             col_name = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
+             current_file = self.df.at[current_idx, col_name]
+
+             # Find next index with DIFFERENT file
+             found_next = False
+             for i in range(self.current_queue_index + 1, len(self.review_queue)):
+                 idx = self.review_queue[i]
+                 fname = self.df.at[idx, col_name]
+                 if fname != current_file:
+                     self.current_queue_index = i
+                     found_next = True
+                     break
+
+             if found_next:
+                 self.active_df_index = None
+                 self.show_current_item()
+             else:
+                  messagebox.showinfo("Info", "Vous êtes au bout de la liste (pas d'autre image).")
         else:
             messagebox.showinfo("Info", "Vous êtes au bout de la liste.")
 
