@@ -1,9 +1,10 @@
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
 import pandas as pd
 import argparse
+import ast
 from inventory_ai import analyze_image, analyze_image_multiple, load_categories
 from dotenv import load_dotenv
 import shutil
@@ -367,7 +368,21 @@ class ReviewApp:
             if os.path.exists(image_path):
                 print(f"Loading image: {image_path}")
                 self.current_image_path = image_path # Store for rotation/rescan
-                self.display_image(image_path)
+
+                # Get Box 2D if available
+                box_2d = None
+                if "Box 2D" in row and pd.notna(row["Box 2D"]):
+                    try:
+                        val = row["Box 2D"]
+                        if isinstance(val, str):
+                            box_2d = ast.literal_eval(val)
+                        elif isinstance(val, list):
+                            box_2d = val
+                    except:
+                        pass
+                
+                self.current_box_2d = box_2d # Store for retake logic
+                self.display_image(image_path, box_2d)
             else:
                 print(f"Image not found at: {image_path}")
                 self.current_image_path = None
@@ -376,10 +391,20 @@ class ReviewApp:
             self.current_image_path = None
             self.display_placeholder("Pas de nom de fichier dans le CSV")
 
-    def display_image(self, path):
+    def display_image(self, path, box_2d=None):
         try:
             img = Image.open(path)
             
+            # Draw box if available BEFORE thumbnailing (or after, but easier to draw on original then resize?
+            # Actually better to draw on original so lines scale or draw after?
+            # Drawing on original: lines will get thinner when downscaling.
+            # Drawing after: Need to transform coordinates.
+
+            # Transform coordinates strategy:
+            # box_2d is [ymin, xmin, ymax, xmax] normalized to 1000.
+
+            # Let's resize first for display, then draw.
+
             # Simple maintaining aspect ratio
             win_height = self.root.winfo_height()
             win_width = self.root.winfo_width() // 2
@@ -389,9 +414,30 @@ class ReviewApp:
                 win_height = 800
                 win_width = 600
                 
-            img.thumbnail((win_width, win_height))
+            # Use copy to not affect original image object if we were keeping it
+            img_disp = img.copy()
+            img_disp.thumbnail((win_width, win_height))
+
+            if box_2d and isinstance(box_2d, list) and len(box_2d) == 4:
+                try:
+                    ymin, xmin, ymax, xmax = box_2d
+
+                    # Normalized 0-1000
+                    # image dimensions
+                    width, height = img_disp.size
+
+                    left = (xmin / 1000) * width
+                    top = (ymin / 1000) * height
+                    right = (xmax / 1000) * width
+                    bottom = (ymax / 1000) * height
+
+                    draw = ImageDraw.Draw(img_disp)
+                    # Red thin rectangle
+                    draw.rectangle([left, top, right, bottom], outline="red", width=2)
+                except Exception as e:
+                    print(f"Error drawing box: {e}")
             
-            self.tk_img = ImageTk.PhotoImage(img)
+            self.tk_img = ImageTk.PhotoImage(img_disp)
             self.image_label.config(image=self.tk_img, text="")
         except Exception as e:
             self.display_placeholder(f"Erreur image: {e}")
@@ -665,6 +711,69 @@ class ReviewApp:
                     entry.config(state="normal")
                     entry.delete(0, tk.END)
                     entry.insert(0, str(val))
+                
+        # Handle Box 2D if present
+        if "box_2d" in result and result["box_2d"]:
+            idx = self.review_queue[self.current_index]
+            self.df.at[idx, "Box 2D"] = str(result["box_2d"]) # Store as string representation
+            self.current_box_2d = result["box_2d"]
+            self.display_image(self.current_image_path, self.current_box_2d)
+            print(f"Updated Box 2D from Rescan: {self.current_box_2d}")
+
+        # --- IMMEDIATE SAVE LOGIC ---
+        try:
+            idx = self.review_queue[self.current_index]
+            
+            # Update DataFrame columns
+            for ui_field, result_key in fields_map.items():
+                if result_key in result:
+                    val = result[result_key]
+                    
+                    # Special handling for Categorie: Prefer ID
+                    if ui_field == "Categorie":
+                        if "categorie_id" in result:
+                            val = result["categorie_id"]
+                        # Else use content of 'categorie' (name) which will be saved as ID if no match? 
+                        # Ideally we want ID. logic above might put name.
+                        # But typically analyze_image returns categorie_id.
+                    
+                    # Numeric handling for DF
+                    if ui_field in ["Quantite"]:
+                         try: val = int(float(str(val)))
+                         except: pass
+                    elif ui_field in ["Prix Unitaire", "Prix Neuf Estime"]:
+                         try: val = float(str(val))
+                         except: pass
+                         
+                    self.df.at[idx, ui_field] = val
+            
+            # Recalculate Total
+            try:
+                q = float(self.df.at[idx, "Quantite"])
+                p = float(self.df.at[idx, "Prix Unitaire"])
+                self.df.at[idx, "Prix Total"] = q * p
+            except: pass
+            
+            # Also update Reliability if provided
+            if "fiabilite" in result:
+                 self.df.at[idx, "Fiabilite"] = result["fiabilite"]
+                 # Update UI for reliability too
+                 if "Fiabilite" in self.fields:
+                      fval = result["fiabilite"]
+                      entry = self.fields["Fiabilite"]
+                      entry.config(state="normal")
+                      entry.delete(0, tk.END)
+                      entry.insert(0, str(fval))
+                      entry.config(state="readonly")
+                      # Update color
+                      color = self._get_reliability_color(fval)
+                      entry.config(bg=color, readonlybackground=color)
+
+            self.save_data()
+            print("Immediate save after Rescan completed.")
+            
+        except Exception as e:
+            print(f"Error saving rescan result immediately: {e}")
 
 
     def mark_as_retake(self):
@@ -681,15 +790,29 @@ class ReviewApp:
             if self.current_image_path:
                  filename = os.path.basename(self.current_image_path)
             
-            # Identify ALL rows to delete (sharing this image)
-            indices_to_drop = [current_idx] 
+            # Identify rows sharing this file
+            sharing_indices = []
             if filename:
                  if "Fichier Original" in self.df.columns:
-                     indices_to_drop = self.df[self.df["Fichier Original"] == filename].index.tolist()
+                     sharing_indices = self.df[self.df["Fichier Original"] == filename].index.tolist()
                  elif "Fichier" in self.df.columns:
-                     indices_to_drop = self.df[self.df["Fichier"] == filename].index.tolist()
+                     sharing_indices = self.df[self.df["Fichier"] == filename].index.tolist()
 
-            # Handle File Operation (MOVE)
+            # Decision: Single vs Multiple Objects
+            # If multiple rows share this file, we ONLY remove the CURRENT row and we KEEP the original file.
+            # If only this row has this file, we remove the row and DELETE (move) the original file.
+            
+            is_multi_object = len(sharing_indices) > 1
+            
+            indices_to_drop = [current_idx]
+            keep_original_file = is_multi_object
+            
+            if not is_multi_object:
+                # If single, we might as well double check we drop everything found (should be just one)
+                if sharing_indices:
+                     indices_to_drop = sharing_indices
+            
+            # Handle File Operation (Save modified copy to retake)
             if self.current_image_path and os.path.exists(self.current_image_path):
                  retake_dir = os.path.join(self.folder_path, RETAKE_FOLDER_NAME)
                  if not os.path.exists(retake_dir):
@@ -703,16 +826,44 @@ class ReviewApp:
                       import time
                       dest_path = os.path.join(retake_dir, f"{base}_{int(time.time())}{ext}")
                  
-                 shutil.move(self.current_image_path, dest_path)
-                 print(f"Moved image to retake (cleaning all {len(indices_to_drop)} rows): {dest_path}")
-                 self.current_image_path = None # Gone
+                 # Open original
+                 img = Image.open(self.current_image_path)
+                 
+                 # Burn red frame if exists
+                 if hasattr(self, 'current_box_2d') and self.current_box_2d:
+                     try:
+                         draw = ImageDraw.Draw(img)
+                         ymin, xmin, ymax, xmax = self.current_box_2d
+                         # Coordinates are normalized 0-1000. Convert to pixels.
+                         width, height = img.size
+                         left = (xmin / 1000) * width
+                         top = (ymin / 1000) * height
+                         right = (xmax / 1000) * width
+                         bottom = (ymax / 1000) * height
+                         
+                         draw.rectangle([left, top, right, bottom], outline="red", width=5) # Thicker for full res
+                     except Exception as e:
+                         print(f"Error drawing box on retake: {e}")
+
+                 # Save to retake folder
+                 img.save(dest_path)
+                 print(f"Saved retake image (Multi={is_multi_object}): {dest_path}")
+                 
+                 # Remove original if needed
+                 if not keep_original_file:
+                     try:
+                        img.close() # Ensure closed before delete
+                        os.remove(self.current_image_path)
+                        print(f"Deleted original file: {self.current_image_path}")
+                        self.current_image_path = None
+                     except Exception as e:
+                         print(f"Error deleting original: {e}")
 
             # Delete from CSV
             if indices_to_drop:
                 self.df = self.df.drop(indices_to_drop)
                 
                 # Update queue: remove any indices that were just dropped
-                # We need to filter self.review_queue
                 self.review_queue = [i for i in self.review_queue if i not in indices_to_drop]
                 
                 # Adjust current index if needed. 
