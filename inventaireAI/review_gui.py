@@ -699,7 +699,11 @@ class ReviewApp:
         if is_last:
             msg = "ATTENTION : C'est le dernier objet de cette image.\nSi vous le supprimez, l'image sera considérée comme vide/traitée.\n\nVoulez-vous supprimer ?"
 
-        if messagebox.askyesno("Confirmer", msg):
+        should_delete = True
+        if is_last:
+             should_delete = messagebox.askyesno("Confirmer", msg)
+
+        if should_delete:
             try:
                 self.df = self.df.drop(idx)
                 if idx in self.review_queue:
