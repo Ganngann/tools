@@ -30,12 +30,14 @@ class ReviewApp:
         
         self.df = None
         self.review_queue = [] # List of indices to review
-        self.current_index = 0
+        self.current_queue_index = 0
+        self.active_df_index = None # The actual index in DF being viewed
         self.current_rotation = 0
         
         self.selection_start = None
         self.selection_rect_id = None
         self.current_selection_coords = None # (x1, y1, x2, y2) in canvas pixels
+        self.original_image_object = None # Store PIL image for resizing
 
         # Load AI Context
         self.categories_context = load_categories() if load_categories else None
@@ -48,16 +50,14 @@ class ReviewApp:
             explanation = (
                 "Les objets sont affichés du **MOINS fiable au PLUS fiable**.\n"
                 "(Les pires erreurs apparaissent en premier)\n\n"
-                "NOUVEAU : Vous pouvez dessiner un carré rouge sur l'image pour cibler le rescan !\n\n"
-                "CONSEIL :\n"
-                "Vous n'êtes pas obligé de tout valider !\n"
-                "Corrigez les premières erreurs, et dès que les objets suivants vous semblent corrects,\n"
-                "vous pouvez considérer que le reste de l'inventaire est bon et arrêter."
+                "NOUVEAU : \n"
+                "- Cliquez sur un objet dans la liste (en bas à gauche) pour le voir.\n"
+                "- Dessinez un carré rouge pour cibler le rescan.\n"
+                "- Redimensionnez la zone d'image/liste avec la barre de séparation.\n"
             )
             self.root.after(100, lambda: messagebox.showinfo("Stratégie de Révision", explanation))
             
         else:
-            # If loading failed, ensure we exit if verify logic didn't destroy (though logic above says it destroys)
             pass
 
     def load_data(self):
@@ -67,34 +67,26 @@ class ReviewApp:
             return False
             
         try:
-            # Robust loading similar to main.py
             self.df = pd.read_csv(self.csv_path, sep=CSV_SEPARATOR, decimal=CSV_DECIMAL)
             
-            # Backfill ID if missing (compatibility with legacy files)
             if "ID" not in self.df.columns:
                 print("Legacy CSV detected (missing ID). Generating IDs...")
                 self.df.insert(0, "ID", range(1, 1 + len(self.df)))
-                # Save immediately to upgrade file
                 self.df.to_csv(self.csv_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
             
-            # Ensure price columns are floats
             price_cols = ["Prix Unitaire", "Prix Neuf Estime", "Prix Total"]
             for col in price_cols:
                 if col in self.df.columns:
                      self.df[col] = self.df[col].astype(str).str.replace(',', '.', regex=False)
                      self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0.0)
             
-            # Ensure Commentaire column exists and handle NaNs
             if "Commentaire" not in self.df.columns:
                 self.df["Commentaire"] = ""
             else:
                 self.df["Commentaire"] = self.df["Commentaire"].fillna("")
             
-            # Filter items to review: Reliability < 100
-            # Sort by reliability ascending (lowest confidence first)
             if "Fiabilite" in self.df.columns:
                 self.df["Fiabilite"] = pd.to_numeric(self.df["Fiabilite"], errors='coerce').fillna(0)
-                # Get indices of items to review
                 review_df = self.df[self.df["Fiabilite"] < 100].sort_values("Fiabilite", ascending=True)
                 self.review_queue = review_df.index.tolist()
             else:
@@ -109,51 +101,49 @@ class ReviewApp:
 
     def save_data(self):
         try:
-            # Atomic Save Strategy
             temp_path = self.csv_path + ".tmp"
-            
             self.df.to_csv(temp_path, index=False, encoding='utf-8-sig', sep=CSV_SEPARATOR, decimal=CSV_DECIMAL, float_format='%.2f')
             
-            # Atomic replace
             if os.path.exists(temp_path):
                 try:
                     os.replace(temp_path, self.csv_path)
-                    print("Sauvegarde effectuée (Atomic).")
                 except OSError as e:
-                    print(f"Atomic replace failed ({e}), trying remove+rename...")
                     if os.path.exists(self.csv_path):
                         os.remove(self.csv_path)
                     os.rename(temp_path, self.csv_path)
-                    print("Sauvegarde effectuée (Fallback).")
                     
         except Exception as e:
             messagebox.showerror("Erreur de sauvegarde", f"GRAVE: Impossible de sauvegarder !\n{e}")
 
     def setup_ui(self):
-        # Layout: Left side for Image, Right side for Form
-        
-        # --- Left Side (Image & Siblings) ---
+        # --- Left Side (PanedWindow) ---
         self.left_frame = tk.Frame(self.root, bg="gray")
         self.left_frame.place(relx=0, rely=0, relwidth=0.5, relheight=1)
         
-        # Canvas for Image
-        self.image_canvas = tk.Canvas(self.left_frame, bg="gray", cursor="cross")
-        self.image_canvas.pack(side="top", expand=True, fill="both", padx=5, pady=5)
+        # PanedWindow for resizing
+        self.paned_window = tk.PanedWindow(self.left_frame, orient=tk.VERTICAL, bg="gray", sashwidth=5, sashrelief="raised")
+        self.paned_window.pack(fill="both", expand=True)
 
-        # Bind Mouse Events for Drawing Box
+        # 1. Canvas Frame (Top)
+        self.canvas_frame = tk.Frame(self.paned_window, bg="gray")
+        self.image_canvas = tk.Canvas(self.canvas_frame, bg="gray", cursor="cross")
+        self.image_canvas.pack(fill="both", expand=True)
+
+        # Bind Mouse Events
         self.image_canvas.bind("<Button-1>", self.on_mouse_down)
         self.image_canvas.bind("<B1-Motion>", self.on_mouse_drag)
         self.image_canvas.bind("<ButtonRelease-1>", self.on_mouse_up)
+        # Bind Resize Event
+        self.image_canvas.bind("<Configure>", self.on_canvas_resize)
 
-        # Sibling List (Bottom of Left Frame)
-        self.sibling_frame = tk.Frame(self.left_frame, height=150, bg="#f0f0f0")
-        self.sibling_frame.pack(side="bottom", fill="x", padx=5, pady=5)
-        self.sibling_frame.pack_propagate(False) # Fixed height
+        self.paned_window.add(self.canvas_frame, stretch="always")
+
+        # 2. Sibling List Frame (Bottom)
+        self.sibling_frame = tk.Frame(self.paned_window, bg="#f0f0f0")
 
         lbl_siblings = tk.Label(self.sibling_frame, text="Objets détectés dans la même image :", font=("Arial", 10, "bold"), bg="#f0f0f0")
         lbl_siblings.pack(anchor="w", padx=5, pady=2)
 
-        # Treeview for siblings
         cols = ("ID", "Nom", "Qte", "Etat")
         self.sibling_tree = ttk.Treeview(self.sibling_frame, columns=cols, show='headings', selectmode="browse")
         self.sibling_tree.heading("ID", text="ID")
@@ -166,22 +156,24 @@ class ReviewApp:
         self.sibling_tree.column("Qte", width=40, anchor="center")
         self.sibling_tree.column("Etat", width=80, anchor="center")
 
-        # Scrollbar for treeview
+        # Bind Selection Event
+        self.sibling_tree.bind("<<TreeviewSelect>>", self.on_sibling_select)
+
         vsb = ttk.Scrollbar(self.sibling_frame, orient="vertical", command=self.sibling_tree.yview)
         self.sibling_tree.configure(yscrollcommand=vsb.set)
 
         self.sibling_tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
+
+        self.paned_window.add(self.sibling_frame, stretch="never", height=200) # Initial height
         
         # --- Right Side (Form) ---
         self.right_frame = tk.Frame(self.root, padx=20, pady=20)
         self.right_frame.place(relx=0.5, rely=0, relwidth=0.5, relheight=1)
         
-        # Header
         self.lbl_title = tk.Label(self.right_frame, text="Détails de l'Objet", font=("Arial", 16, "bold"))
         self.lbl_title.pack(pady=(0, 20))
         
-        # Rotation and Rescan Toolbar inside right frame
         self.tools_frame = tk.LabelFrame(self.right_frame, text="Outils & Corrections", padx=10, pady=10)
         self.tools_frame.pack(fill="x", pady=(0, 15))
         
@@ -200,73 +192,49 @@ class ReviewApp:
         self.form_frame = tk.Frame(self.right_frame)
         self.form_frame.pack(fill="x")
         
-        # Fields
         self.fields = {}
-        
-        self.create_field("Commentaire") # Add Commentaire field
+        self.create_field("Commentaire")
         self.create_field("ID", readonly=True)
         self.create_field("Fichier", readonly=True)
         self.create_field("Categorie")
         self.create_field("Nom")
-        self.create_field("Etat") # Should be dropdown really, but entry ok
+        self.create_field("Etat")
         self.create_field("Quantite")
         self.create_field("Prix Unitaire")
         self.create_field("Prix Neuf Estime")
-        
         self.create_field("Fiabilite", readonly=True)
         ToolTip(self.fields["Fiabilite"], "Confiance de l'IA (0-100%).\nSi < 100%, vérifiez bien les infos.\nLe bouton 'Valider' la passera à 100%.")
         
-        # Buttons
         self.btn_frame = tk.Frame(self.right_frame, pady=20)
         self.btn_frame.pack(fill="x")
         
-        # Row 1: PRIMARY ACTION (Validate)
         row1 = tk.Frame(self.btn_frame)
         row1.pack(fill="x", pady=5)
-        
         self.btn_validate = tk.Button(row1, text="✅ Valider (100%)", bg="#d4edda", font=("Arial", 12, "bold"), height=2, command=self.validate_item)
         self.btn_validate.pack(fill="x")
-        ToolTip(self.btn_validate, "Confirmer que les infos sont correctes.\nMet la fiabilité à 100% et passe au suivant.")
 
-        # Row 2: SECONDARY ACTIONS (Comment, Retake, Delete)
         row2 = tk.Frame(self.btn_frame)
         row2.pack(fill="x", pady=5)
-        
         self.btn_comment = tk.Button(row2, text="💬 Commenter", bg="#fff3cd", command=self.comment_and_skip_item)
         self.btn_comment.pack(side="left", padx=2, expand=True, fill="x")
-        ToolTip(self.btn_comment, "Sauvegarder un commentaire sans valider totalement.\nUtile si vous avez un doute.")
-
         self.btn_retake = tk.Button(row2, text="📸 À Refaire", bg="#f5c6cb", command=self.mark_as_retake)
         self.btn_retake.pack(side="left", padx=2, expand=True, fill="x")
-        ToolTip(self.btn_retake, "Photo ratée ?\nDéplace l'image dans le dossier 'a_refaire' et la retire de la liste.")
-        
         self.btn_delete = tk.Button(row2, text="🗑️ Suppr.", bg="#f8d7da", command=self.delete_item)
         self.btn_delete.pack(side="left", padx=2, expand=True, fill="x")
-        ToolTip(self.btn_delete, "Supprimer définitivement cet objet de l'inventaire.")
 
-        # Row 3: NAVIGATION (Prev, Next)
         row3 = tk.Frame(self.btn_frame)
         row3.pack(fill="x", pady=10)
-        
         self.btn_prev = tk.Button(row3, text="⬅️ Précédent", command=self.prev_item)
         self.btn_prev.pack(side="left", padx=5, expand=True, fill="x")
-
         self.btn_skip = tk.Button(row3, text="Suivant ➡️", command=self.next_item)
         self.btn_skip.pack(side="left", padx=5, expand=True, fill="x")
 
-        # Status
         self.lbl_status = tk.Label(self.right_frame, text="", fg="blue", font=("Arial", 10, "bold"))
         self.lbl_status.pack(side="bottom", pady=(5, 10))
 
-        # Help Text
-        help_text = (
-            "Trié par fiabilité croissante (Pires en premier).\n"
-            "Fiabilité < 100% = À vérifier. Arrêtez-vous quand c'est bon !"
-        )
-        self.lbl_help = tk.Label(self.right_frame, text=help_text, fg="#666", font=("Arial", 9), justify="center", bg="#f8f9fa", pady=5)
+        self.lbl_help = tk.Label(self.right_frame, text="Trié par fiabilité croissante (Pires en premier).", fg="#666", font=("Arial", 9), justify="center", bg="#f8f9fa", pady=5)
         self.lbl_help.pack(side="bottom", fill="x", pady=5)
 
-        # Bind Keys
         self.root.bind('<Left>', lambda e: self.prev_item())
         self.root.bind('<Right>', lambda e: self.next_item())
 
@@ -282,7 +250,6 @@ class ReviewApp:
         if not self.selection_start: return
         x0, y0 = self.selection_start
         x1, y1 = event.x, event.y
-
         if self.selection_rect_id:
             self.image_canvas.coords(self.selection_rect_id, x0, y0, x1, y1)
         else:
@@ -292,23 +259,54 @@ class ReviewApp:
         if not self.selection_start: return
         x0, y0 = self.selection_start
         x1, y1 = event.x, event.y
-
-        # Normalize so x0 < x1
         min_x, max_x = min(x0, x1), max(x0, x1)
         min_y, max_y = min(y0, y1), max(y0, y1)
-
-        # Ignore tiny boxes (accidental clicks)
         if (max_x - min_x) > 10 and (max_y - min_y) > 10:
             self.current_selection_coords = (min_x, min_y, max_x, max_y)
-            print(f"Selection set: {self.current_selection_coords}")
         else:
             if self.selection_rect_id:
                 self.image_canvas.delete(self.selection_rect_id)
                 self.selection_rect_id = None
                 self.current_selection_coords = None
 
+    # --- Resize Handling ---
+    def on_canvas_resize(self, event):
+        # Debounce or just redraw? Just redraw for now
+        if self.original_image_object:
+             # Use current box_2d to redraw correctly
+             self.display_image(None, self.current_box_2d)
+
+    # --- Sibling Navigation ---
+    def on_sibling_select(self, event):
+        selection = self.sibling_tree.selection()
+        if not selection: return
+
+        # Avoid recursion loop if selection was set programmatically
+        # Check current active vs selected
+        item = self.sibling_tree.item(selection[0])
+        obj_id = item['values'][0]
+
+        # Find index in DF
+        rows = self.df[self.df['ID'] == obj_id].index.tolist()
+        if rows:
+            new_df_idx = rows[0]
+            if new_df_idx == self.active_df_index:
+                return # Already active
+
+            self.active_df_index = new_df_idx
+
+            # Sync Queue Index if possible
+            if self.active_df_index in self.review_queue:
+                self.current_queue_index = self.review_queue.index(self.active_df_index)
+            else:
+                # We are viewing an item NOT in the queue (detached)
+                # Keep current_queue_index as is (it points to where we were)
+                pass
+
+            self.show_current_item(reload_siblings=False)
+
     def load_category_list(self):
-        cats = {} # Map ID -> Name
+        cats = {}
         try:
             csv_path = os.path.join(self.folder_path, "categories.csv")
             if not os.path.exists(csv_path):
@@ -331,11 +329,8 @@ class ReviewApp:
         lbl.pack(side="left")
         
         if name == "Categorie":
-            # Use Combobox - Display Names
             self.category_map = self.load_category_list()
-            # Sort names for display
             display_values = sorted(list(self.category_map.values()))
-            
             entry = ttk.Combobox(row, values=display_values, font=("Arial", 10))
         elif name == "Etat":
             entry = ttk.Combobox(row, values=["Neuf", "Occasion", "Inconnu"], font=("Arial", 10))
@@ -343,91 +338,87 @@ class ReviewApp:
             entry = tk.Entry(row, font=("Arial", 10))
         
         entry.pack(side="left", expand=True, fill="x")
-        
         if readonly:
             entry.config(state="readonly")
-            
         self.fields[name] = entry
 
     def _get_reliability_color(self, val):
-        try:
-            score = float(val)
-        except:
-            return "white"
-            
+        try: score = float(val)
+        except: return "white"
         if score < 50: return "#ffcccc"
         elif score >= 90: return "#ccffcc"
         elif score < 70: return "#ffeeba"
         else: return "#fff3cd"
 
-    def show_current_item(self):
-        # Clear previous selection
+    def show_current_item(self, reload_siblings=True):
         if self.selection_rect_id:
             self.image_canvas.delete(self.selection_rect_id)
             self.selection_rect_id = None
             self.current_selection_coords = None
 
         self.current_rotation = 0
-        if self.current_index >= len(self.review_queue):
-            messagebox.showinfo("Terminé", "Aucun autre élément à réviser !")
-            self.root.quit()
-            return
 
-        idx = self.review_queue[self.current_index]
+        # Determine Active Index Logic
+        if self.active_df_index is None:
+            # Initialize from queue
+            if self.current_queue_index < len(self.review_queue):
+                self.active_df_index = self.review_queue[self.current_queue_index]
+            else:
+                 messagebox.showinfo("Terminé", "Aucun autre élément à réviser !")
+                 self.root.quit()
+                 return
+
+        idx = self.active_df_index
         row = self.df.loc[idx]
         
-        # Update Title Status
-        self.lbl_status.config(text=f"Objet {self.current_index + 1} / {len(self.review_queue)} (ID: {row.get('ID', '?')})")
+        # Status Label Logic
+        queue_pos = "?"
+        if idx in self.review_queue:
+            queue_pos = str(self.review_queue.index(idx) + 1)
+
+        self.lbl_status.config(text=f"Objet ID: {row.get('ID', '?')} (Queue: {queue_pos} / {len(self.review_queue)})")
         
-        # Fill fields
         for field, entry in self.fields.items():
             val = row.get(field, "")
             if pd.isna(val): val = ""
-            
             entry.config(state="normal")
             entry.delete(0, tk.END)
-            
             if field == "Categorie":
                 cat_id = str(val).strip()
                 cat_name = self.category_map.get(cat_id, cat_id)
                 entry.insert(0, cat_name)
             else:
                 entry.insert(0, str(val))
-                
             if field in ["ID", "Fichier", "Fichier Original", "Fiabilite"]:
                 entry.config(state="readonly")
-                
             if field == "Fiabilite":
                 color = self._get_reliability_color(val)
                 entry.config(bg=color, readonlybackground=color)
 
-        # Load Image
         filename = row.get("Fichier Original", "")
         if not filename:
             filename = row.get("Fichier", "")
             
         if filename:
-            # Populate Sibling Tree
-            self._update_sibling_list(filename, current_id=row.get('ID'))
+            if reload_siblings:
+                self._update_sibling_list(filename, current_id=row.get('ID'))
+            else:
+                # Just highlight current
+                self._highlight_sibling(row.get('ID'))
 
             image_path = os.path.join(self.processed_dir, str(filename))
             if not os.path.exists(image_path):
                 image_path = os.path.join(self.folder_path, str(filename))
             
             if os.path.exists(image_path):
-                print(f"Loading image: {image_path}")
                 self.current_image_path = image_path
-
                 box_2d = None
                 if "Box 2D" in row and pd.notna(row["Box 2D"]):
                     try:
                         val = row["Box 2D"]
-                        if isinstance(val, str):
-                            box_2d = ast.literal_eval(val)
-                        elif isinstance(val, list):
-                            box_2d = val
-                    except:
-                        pass
+                        if isinstance(val, str): box_2d = ast.literal_eval(val)
+                        elif isinstance(val, list): box_2d = val
+                    except: pass
                 
                 self.current_box_2d = box_2d
                 self.display_image(image_path, box_2d)
@@ -439,20 +430,16 @@ class ReviewApp:
             self.display_placeholder("Pas de nom de fichier dans le CSV")
 
     def _update_sibling_list(self, filename, current_id):
-        # Clear tree
         for item in self.sibling_tree.get_children():
             self.sibling_tree.delete(item)
             
-        # Find siblings
         if "Fichier Original" in self.df.columns:
             siblings = self.df[self.df["Fichier Original"] == filename]
         elif "Fichier" in self.df.columns:
              siblings = self.df[self.df["Fichier"] == filename]
-        else:
-             return
+        else: return
 
         for _, s_row in siblings.iterrows():
-            is_current = str(s_row.get("ID")) == str(current_id)
             values = (
                 s_row.get("ID", ""),
                 s_row.get("Nom", ""),
@@ -460,68 +447,73 @@ class ReviewApp:
                 s_row.get("Etat", "")
             )
             item_id = self.sibling_tree.insert("", "end", values=values)
-            if is_current:
+            if str(s_row.get("ID")) == str(current_id):
                 self.sibling_tree.selection_set(item_id)
+                self.sibling_tree.see(item_id)
                 self.sibling_tree.item(item_id, tags=("current",))
 
         self.sibling_tree.tag_configure("current", background="#d4edda")
 
+    def _highlight_sibling(self, current_id):
+        # Update selection without rebuilding tree
+        for item in self.sibling_tree.get_children():
+            vals = self.sibling_tree.item(item, 'values')
+            if str(vals[0]) == str(current_id):
+                 self.sibling_tree.selection_set(item)
+                 self.sibling_tree.see(item)
+                 self.sibling_tree.item(item, tags=("current",))
+            else:
+                 self.sibling_tree.item(item, tags=())
 
-    def display_image(self, path, box_2d=None):
+    def display_image(self, path=None, box_2d=None):
         try:
-            img = Image.open(path)
-            self.original_image_size = img.size # (width, height)
+            # If path provided, load and cache
+            if path:
+                self.original_image_object = Image.open(path)
+                self.original_image_size = self.original_image_object.size
+
+            img = self.original_image_object
+            if not img: return
 
             # Calculate resize to fit canvas
             canvas_width = self.image_canvas.winfo_width()
             canvas_height = self.image_canvas.winfo_height()
-            
-            # Fallback if canvas not drawn yet
             if canvas_width <= 1: canvas_width = 600
-            if canvas_height <= 1: canvas_height = 800
+            if canvas_height <= 1: canvas_height = 600
 
-            # Maintain aspect ratio
             img_ratio = img.width / img.height
             canvas_ratio = canvas_width / canvas_height
 
             if img_ratio > canvas_ratio:
-                # Fit to width
                 new_width = canvas_width
                 new_height = int(new_width / img_ratio)
             else:
-                # Fit to height
                 new_height = canvas_height
                 new_width = int(new_height * img_ratio)
-                
+
+            if new_width < 1 or new_height < 1: return
+
             img_disp = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
             self.tk_img = ImageTk.PhotoImage(img_disp)
 
-            # Clear canvas and draw image
             self.image_canvas.delete("all")
-            # Center image
             x_center = canvas_width // 2
             y_center = canvas_height // 2
             self.image_canvas.create_image(x_center, y_center, image=self.tk_img, anchor="center")
 
-            # Calculate offset of image top-left corner relative to canvas
             self.img_offset_x = x_center - (new_width // 2)
             self.img_offset_y = y_center - (new_height // 2)
             self.img_display_size = (new_width, new_height)
 
-            # Draw Box 2D if available
             if box_2d and isinstance(box_2d, list) and len(box_2d) == 4:
                 try:
                     ymin, xmin, ymax, xmax = box_2d
-                    # Normalized 0-1000
-
                     left = (xmin / 1000) * new_width + self.img_offset_x
                     top = (ymin / 1000) * new_height + self.img_offset_y
                     right = (xmax / 1000) * new_width + self.img_offset_x
                     bottom = (ymax / 1000) * new_height + self.img_offset_y
-
                     self.image_canvas.create_rectangle(left, top, right, bottom, outline="#00ff00", width=2, dash=(5, 5))
-                except Exception as e:
-                    print(f"Error drawing box: {e}")
+                except Exception: pass
             
         except Exception as e:
             self.display_placeholder(f"Erreur image: {e}")
@@ -532,9 +524,7 @@ class ReviewApp:
                 img = Image.open(self.current_image_path)
                 img = img.rotate(90, expand=True)
                 img.save(self.current_image_path)
-                
-                # Refresh display
-                self.display_image(self.current_image_path)
+                self.display_image(self.current_image_path, self.current_box_2d)
             except Exception as e:
                 messagebox.showerror("Erreur", f"Impossible de pivoter l'image: {e}")
 
@@ -543,22 +533,21 @@ class ReviewApp:
         self.image_canvas.create_text(200, 200, text=text, fill="white")
 
     def comment_and_skip_item(self):
-        if self.current_index < len(self.review_queue):
-            idx = self.review_queue[self.current_index]
+        idx = self.active_df_index
+        if idx is not None:
             try:
                 self.df.at[idx, "Commentaire"] = self.get_field_value("Commentaire")
                 self.save_data()
                 self.next_item()
             except Exception as e:
                 messagebox.showerror("Erreur", f"Erreur lors du commentaire: {e}")
-        else:
-             self.next_item()
 
     def get_field_value(self, name):
         return self.fields[name].get()
 
     def validate_item(self):
-        idx = self.review_queue[self.current_index]
+        idx = self.active_df_index
+        if idx is None: return
         try:
             self.df.at[idx, "Nom"] = self.get_field_value("Nom")
             cat_name = self.get_field_value("Categorie")
@@ -596,16 +585,22 @@ class ReviewApp:
 
     def delete_item(self):
         if messagebox.askyesno("Confirmer", "Voulez-vous vraiment supprimer cette ligne de l'inventaire ?"):
-            idx = self.review_queue[self.current_index]
+            idx = self.active_df_index
             try:
                 self.df = self.df.drop(idx)
                 if idx in self.review_queue:
                     self.review_queue.remove(idx)
                 
-                if self.current_index >= len(self.review_queue):
-                    self.current_index = len(self.review_queue) - 1
-                if self.current_index < 0:
-                    self.current_index = 0
+                # Logic for "next" after delete:
+                # If we were in queue, current_queue_index is now pointing to next item (because list shifted)
+                # But we need to update active_df_index.
+
+                self.active_df_index = None # Force reset from queue
+
+                if self.current_queue_index >= len(self.review_queue):
+                    self.current_queue_index = len(self.review_queue) - 1
+                if self.current_queue_index < 0:
+                    self.current_queue_index = 0
                     
                 self.save_data()
                 self.show_current_item()
@@ -613,8 +608,9 @@ class ReviewApp:
                 messagebox.showerror("Erreur", f"Erreur lors de la suppression: {e}")
 
     def prev_item(self):
-        if self.current_index > 0:
-            self.current_index -= 1
+        if self.current_queue_index > 0:
+            self.current_queue_index -= 1
+            self.active_df_index = None # Reset to let show_current_item pick from queue
             self.show_current_item()
         else:
             messagebox.showinfo("Info", "Vous êtes au début de la liste.")
@@ -624,16 +620,11 @@ class ReviewApp:
             messagebox.showwarning("Attention", "Pas d'image chargée pour l'analyse.")
             return
 
-        # Check if selection active
         has_selection = self.current_selection_coords is not None
-
-        if has_selection:
-             msg = "Rescan CIBLÉ sur la zone rouge sélectionnée.\nEntrez un indice (optionnel):"
-        else:
-             msg = "Rescan de TOUTE l'image.\nEntrez un indice (optionnel):"
+        msg = "Rescan CIBLÉ sur la zone rouge sélectionnée.\nEntrez un indice (optionnel):" if has_selection else "Rescan de TOUTE l'image.\nEntrez un indice (optionnel):"
 
         hint = simpledialog.askstring("Rescan IA", msg)
-        if hint is None: return # Cancelled
+        if hint is None: return
             
         try:
             self.root.config(cursor="watch")
@@ -641,20 +632,15 @@ class ReviewApp:
             
             target_image_path = self.current_image_path
             temp_crop_path = None
-            crop_info = None # (x_offset, y_offset, width, height) of crop in ORIGINAL image coords
+            crop_info = None
 
-            # Handle Selection Crop
             if has_selection:
                 x1, y1, x2, y2 = self.current_selection_coords
-
-                # Convert Canvas Coords -> Original Image Coords
-                # 1. Remove offset
                 img_x1 = x1 - self.img_offset_x
                 img_y1 = y1 - self.img_offset_y
                 img_x2 = x2 - self.img_offset_x
                 img_y2 = y2 - self.img_offset_y
 
-                # 2. Scale back to original
                 disp_w, disp_h = self.img_display_size
                 orig_w, orig_h = self.original_image_size
 
@@ -666,56 +652,39 @@ class ReviewApp:
                 final_x2 = min(orig_w, int(img_x2 * scale_x))
                 final_y2 = min(orig_h, int(img_y2 * scale_y))
 
-                # Verify valid crop
                 if (final_x2 - final_x1) > 10 and (final_y2 - final_y1) > 10:
                     try:
                         img = Image.open(self.current_image_path)
                         crop = img.crop((final_x1, final_y1, final_x2, final_y2))
-
                         temp_crop_path = os.path.join(self.folder_path, "temp_rescan_crop.jpg")
                         crop.save(temp_crop_path)
                         target_image_path = temp_crop_path
-
                         crop_info = (final_x1, final_y1, final_x2 - final_x1, final_y2 - final_y1)
-                        print(f"Rescanning crop: {crop_info}")
                     except Exception as e:
-                        print(f"Crop failed: {e}. Falling back to full image.")
+                        print(f"Crop failed: {e}")
                         target_image_path = self.current_image_path
 
-            print(f"Rescanning with hint: {hint}")
             result = analyze_image(target_image_path, categories_context=self.categories_context, user_hint=hint)
             
-            # If we cropped, we must transform the result's box_2d back to global coordinates
             if crop_info and "box_2d" in result:
-                local_box = result["box_2d"] # [ymin, xmin, ymax, xmax] 0-1000 in CROP
-
+                local_box = result["box_2d"]
                 crop_x, crop_y, crop_w, crop_h = crop_info
                 orig_w, orig_h = self.original_image_size
 
-                # Normalize factor to pixels in crop
                 l_ymin = (local_box[0] / 1000.0) * crop_h
                 l_xmin = (local_box[1] / 1000.0) * crop_w
                 l_ymax = (local_box[2] / 1000.0) * crop_h
                 l_xmax = (local_box[3] / 1000.0) * crop_w
 
-                # Add offset
-                g_ymin = l_ymin + crop_y
-                g_xmin = l_xmin + crop_x
-                g_ymax = l_ymax + crop_y
-                g_xmax = l_xmax + crop_x
-
-                # Normalize back to global 0-1000
-                f_ymin = int((g_ymin / orig_h) * 1000)
-                f_xmin = int((g_xmin / orig_w) * 1000)
-                f_ymax = int((g_ymax / orig_h) * 1000)
-                f_xmax = int((g_xmax / orig_w) * 1000)
+                f_ymin = int(((l_ymin + crop_y) / orig_h) * 1000)
+                f_xmin = int(((l_xmin + crop_x) / orig_w) * 1000)
+                f_ymax = int(((l_ymax + crop_y) / orig_h) * 1000)
+                f_xmax = int(((l_xmax + crop_x) / orig_w) * 1000)
 
                 result["box_2d"] = [f_ymin, f_xmin, f_ymax, f_xmax]
 
-            # Update fields directly
             self._apply_scan_result(result)
 
-            # Clean up temp
             if temp_crop_path and os.path.exists(temp_crop_path):
                 try: os.remove(temp_crop_path)
                 except: pass
@@ -739,9 +708,7 @@ class ReviewApp:
             self.root.config(cursor="watch")
             self.root.update()
             
-            print(f"Multi-scanning with hint: {hint}")
             results = analyze_image_multiple(self.current_image_path, categories_context=self.categories_context, user_hint=hint, target_element=hint)
-            
             if not isinstance(results, list): results = [results]
             if len(results) == 0:
                 messagebox.showinfo("Résultat", "Aucun objet détecté.")
@@ -752,7 +719,7 @@ class ReviewApp:
             
             new_rows_count = 0
             if len(results) > 1:
-                idx = self.review_queue[self.current_index]
+                idx = self.active_df_index
                 current_row_data = self.df.loc[idx].to_dict()
                 
                 max_id = 0
@@ -790,7 +757,7 @@ class ReviewApp:
                     
                     self.df = pd.concat([self.df, pd.DataFrame([new_row])], ignore_index=True)
 
-                current_queue_pos = self.current_index
+                current_queue_pos = self.current_queue_index
                 new_indices = list(range(len(self.df) - new_rows_count, len(self.df)))
                 self.review_queue[current_queue_pos+1:current_queue_pos+1] = new_indices
                 
@@ -820,7 +787,6 @@ class ReviewApp:
                 elif "prix" in result_key:
                         try: val = float(str(val))
                         except: pass
-                        
                 entry = self.fields.get(ui_field)
                 if entry:
                     entry.config(state="normal")
@@ -828,19 +794,18 @@ class ReviewApp:
                     entry.insert(0, str(val))
                 
         if "box_2d" in result and result["box_2d"]:
-            idx = self.review_queue[self.current_index]
+            idx = self.active_df_index
             self.df.at[idx, "Box 2D"] = str(result["box_2d"])
             self.current_box_2d = result["box_2d"]
-            self.display_image(self.current_image_path, self.current_box_2d)
+            self.display_image(None, self.current_box_2d)
 
         try:
-            idx = self.review_queue[self.current_index]
+            idx = self.active_df_index
             for ui_field, result_key in fields_map.items():
                 if result_key in result:
                     val = result[result_key]
                     if ui_field == "Categorie":
-                        if "categorie_id" in result:
-                            val = result["categorie_id"]
+                        if "categorie_id" in result: val = result["categorie_id"]
                     if ui_field in ["Quantite"]:
                          try: val = int(float(str(val)))
                          except: pass
@@ -868,13 +833,15 @@ class ReviewApp:
                       entry.config(bg=color, readonlybackground=color)
 
             self.save_data()
+            self._update_sibling_list(self.df.at[idx, "Fichier Original"], self.df.at[idx, "ID"])
             
         except Exception as e:
             print(f"Error saving rescan result immediately: {e}")
 
     def mark_as_retake(self):
-        if self.current_index >= len(self.review_queue): return
-        current_idx = self.review_queue[self.current_index]
+        if self.current_queue_index >= len(self.review_queue): return
+        # Logic here works on Active Index if we are consistent, but typically retake is for bad images.
+        current_idx = self.active_df_index
         
         if not self.current_image_path or not os.path.exists(self.current_image_path):
              messagebox.showwarning("Attention", "Pas d'image trouvée à déplacer.")
@@ -896,8 +863,7 @@ class ReviewApp:
             keep_original_file = is_multi_object
             
             if not is_multi_object:
-                if sharing_indices:
-                     indices_to_drop = sharing_indices
+                if sharing_indices: indices_to_drop = sharing_indices
             
             if self.current_image_path and os.path.exists(self.current_image_path):
                  retake_dir = os.path.join(self.folder_path, RETAKE_FOLDER_NAME)
@@ -935,10 +901,12 @@ class ReviewApp:
                 self.df = self.df.drop(indices_to_drop)
                 self.review_queue = [i for i in self.review_queue if i not in indices_to_drop]
                 
-                if self.current_index >= len(self.review_queue):
-                    self.current_index = len(self.review_queue) - 1
-                if self.current_index < 0:
-                    self.current_index = 0
+                self.active_df_index = None # Reset
+
+                if self.current_queue_index >= len(self.review_queue):
+                    self.current_queue_index = len(self.review_queue) - 1
+                if self.current_queue_index < 0:
+                    self.current_queue_index = 0
 
             self.save_data()
             self.show_current_item()
@@ -947,8 +915,10 @@ class ReviewApp:
             messagebox.showerror("Erreur", f"Erreur lors du marquage à refaire: {e}")
 
     def next_item(self):
-        if self.current_index < len(self.review_queue) - 1:
-            self.current_index += 1
+        # Move forward in queue
+        if self.current_queue_index < len(self.review_queue) - 1:
+            self.current_queue_index += 1
+            self.active_df_index = None # Reset so it pulls from queue
             self.show_current_item()
         else:
             messagebox.showinfo("Info", "Vous êtes au bout de la liste.")
