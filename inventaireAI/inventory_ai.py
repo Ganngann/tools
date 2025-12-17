@@ -46,18 +46,24 @@ def load_categories(csv_path="categories.csv"):
         return ""
     return categories_text
 
-def analyze_image(image_path, categories_context=None, user_hint=None, folder_context=None, previous_data=None):
+def analyze_image(image_path, categories_context=None, user_hint=None, folder_context=None, previous_data=None, status_callback=None):
     """
     Analyzes an image using Gemini to extract Name, Category, and Quantity.
     Returns a dictionary with these fields.
     """
     try:
+        if status_callback:
+            status_callback("Initialisation de l'IA (Gemini 2.0 Flash)...")
+
         # Use a model that is available in the list
         model = genai.GenerativeModel('gemini-2.0-flash')
         
         # Load categories if not provided
         if categories_context is None:
             categories_context = load_categories()
+
+        if status_callback:
+            status_callback("Préparation et compression de l'image...")
 
         # Use context manager to ensure file is closed after reading
         with Image.open(image_path) as img:
@@ -140,8 +146,14 @@ def analyze_image(image_path, categories_context=None, user_hint=None, folder_co
             }}
             """
             
+            if status_callback:
+                status_callback("Envoi à l'API Gemini (Analyse en cours)...")
+
             response = model.generate_content([prompt, image_blob])
         
+        if status_callback:
+            status_callback("Réception et traitement de la réponse...")
+
         # Clean up response text to ensure it's valid JSON
         text = response.text.strip()
         if text.startswith("```json"):
@@ -164,18 +176,24 @@ def analyze_image(image_path, categories_context=None, user_hint=None, folder_co
             "fiabilite": 0
         }
 
-def analyze_image_multiple(image_path, target_element=None, categories_context=None, high_quality=False, user_hint=None):
+def analyze_image_multiple(image_path, target_element=None, categories_context=None, high_quality=False, user_hint=None, status_callback=None):
     """
     Analyzes an image using Gemini to extract a list of objects (Name, Category, Quantity, etc.).
     Returns a list of dictionaries.
     """
     try:
+        if status_callback:
+            status_callback("Initialisation de l'IA (Multi-Objets)...")
+
         # Use a model that is available in the list
         model = genai.GenerativeModel('gemini-2.0-flash')
 
         # Load categories if not provided
         if categories_context is None:
             categories_context = load_categories()
+
+        if status_callback:
+            status_callback("Préparation de l'image (Mode Haute Qualité)..." if high_quality else "Préparation de l'image...")
 
         # Use context manager to ensure file is closed after reading
         with Image.open(image_path) as img:
@@ -306,7 +324,13 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             ]
             """
 
+            if status_callback:
+                status_callback("Envoi à l'API Gemini (Scan Multi en cours)...")
+
             response = model.generate_content([prompt, image_blob])
+
+        if status_callback:
+            status_callback("Réception et traitement des résultats...")
 
         # Clean up response text to ensure it's valid JSON
         text = response.text.strip()

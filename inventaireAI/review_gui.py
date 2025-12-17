@@ -337,7 +337,38 @@ class ReviewApp:
              # Use current box_2d to redraw correctly
              self.display_image(None, self.current_box_2d)
 
+    def update_status(self, message):
+        """Updates the status label and forces a UI refresh to show progress."""
+        self.lbl_status.config(text=message, fg="red")
+        self.root.update()
+
     # --- Sibling Navigation ---
+    def _get_next_sibling_index(self, current_idx):
+        """Returns the index of the next object in the SAME image, or None."""
+        if current_idx is None: return None
+
+        col_name = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
+        filename = self.df.at[current_idx, col_name]
+
+        # Get all rows for this file
+        siblings = self.df[self.df[col_name] == filename]
+
+        # We need to find the "next" sibling.
+        # Logic: Find current index in siblings list, return next one.
+        # Ensure consistent sorting (e.g., by ID)
+        if "ID" in siblings.columns:
+            # Sort by ID to ensure logical next
+            siblings = siblings.sort_values("ID")
+
+        sibling_indices = siblings.index.tolist()
+
+        if current_idx in sibling_indices:
+            pos = sibling_indices.index(current_idx)
+            if pos < len(sibling_indices) - 1:
+                return sibling_indices[pos + 1]
+
+        return None
+
     def on_sibling_select(self, event):
         selection = self.sibling_tree.selection()
         if not selection: return
@@ -690,7 +721,18 @@ class ReviewApp:
             self.df.at[idx, "Fiabilite"] = 100
             
             self.save_data()
-            self.next_item()
+
+            # Navigate to next object (Sibling -> Next Image)
+            next_sibling_idx = self._get_next_sibling_index(idx)
+
+            if next_sibling_idx is not None:
+                self.active_df_index = next_sibling_idx
+                # Update queue index if applicable
+                if self.active_df_index in self.review_queue:
+                    self.current_queue_index = self.review_queue.index(self.active_df_index)
+                self.show_current_item(reload_siblings=False)
+            else:
+                self.next_item()
             
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de la validation: {e}")
@@ -787,7 +829,7 @@ class ReviewApp:
             
         try:
             self.root.config(cursor="watch")
-            self.root.update()
+            self.update_status("Démarrage du rescan...")
             
             target_image_path = self.current_image_path
             temp_crop_path = None
@@ -823,7 +865,7 @@ class ReviewApp:
                         print(f"Crop failed: {e}")
                         target_image_path = self.current_image_path
 
-            result = analyze_image(target_image_path, categories_context=self.categories_context, user_hint=hint)
+            result = analyze_image(target_image_path, categories_context=self.categories_context, user_hint=hint, status_callback=self.update_status)
             
             if crop_info and result.get("box_2d") and isinstance(result["box_2d"], list) and len(result["box_2d"]) == 4:
                 local_box = result["box_2d"]
@@ -843,14 +885,18 @@ class ReviewApp:
                 result["box_2d"] = [f_ymin, f_xmin, f_ymax, f_xmax]
 
             self._apply_scan_result(result)
+            # Ensure siblings list is updated because reliability or other data might have changed
+            self.show_current_item(reload_siblings=True)
 
             if temp_crop_path and os.path.exists(temp_crop_path):
                 try: os.remove(temp_crop_path)
                 except: pass
 
+            self.update_status("Analyse terminée.")
             messagebox.showinfo("Succès", "Analyse terminée ! Vérifiez les valeurs avant de valider.")
             
         except Exception as e:
+            self.update_status(f"Erreur: {e}")
             messagebox.showerror("Erreur", f"Echec de l'analyse: {e}")
         finally:
             self.root.config(cursor="")
@@ -865,11 +911,12 @@ class ReviewApp:
 
         try:
             self.root.config(cursor="watch")
-            self.root.update()
+            self.update_status("Démarrage du scan multi-objets...")
             
-            results = analyze_image_multiple(self.current_image_path, categories_context=self.categories_context, user_hint=hint, target_element=hint)
+            results = analyze_image_multiple(self.current_image_path, categories_context=self.categories_context, user_hint=hint, target_element=hint, status_callback=self.update_status)
             if not isinstance(results, list): results = [results]
             if len(results) == 0:
+                self.update_status("Aucun objet détecté.")
                 messagebox.showinfo("Résultat", "Aucun objet détecté.")
                 return
                 
