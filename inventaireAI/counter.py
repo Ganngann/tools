@@ -394,12 +394,18 @@ def process_inventory(input_path, target_element=None, progress_callback=None, s
         
         if progress_callback:
             # We use index+1 out of total
-            progress_callback(index + 1, total_rows, filename)
+            progress_callback(index + 1, total_rows, f"Traitement de : {filename}")
             
         print(f"Processing [{index + 1}/{total_rows}]: {filename}...")
         
+        # Callback wrapper for status updates
+        def status_bridge(msg):
+            if progress_callback:
+                progress_callback(index + 1, total_rows, f"{filename} : {msg}")
+            print(f"  -> {msg}")
+
         # Run AI
-        results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True)
+        results = analyze_image_multiple(original_path, target_element=target_element, categories_context=categories_context, high_quality=True, status_callback=status_bridge)
 
         if not isinstance(results, list):
             results = [results]
