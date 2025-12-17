@@ -1,0 +1,72 @@
+name: Build Windows Executable
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: ./inventaireAI
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+
+      - name: Update Version Info (Mock Build Date)
+        run: |
+          $date = Get-Date -Format "yyyy-MM-dd"
+          (Get-Content version_info.py) | ForEach-Object {
+            if ($_ -match "^BUILD_DATE =") { "BUILD_DATE = `"$date`"" } else { $_ }
+          } | Set-Content version_info.py
+
+      - name: Get Version
+        id: get_version
+        run: |
+          $json = Get-Content version_info.json | ConvertFrom-Json
+          echo "VERSION=$($json.version)" >> $env:GITHUB_OUTPUT
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name "InventaireAI_v${{ steps.get_version.outputs.VERSION }}" `
+            --hidden-import=pandas `
+            --hidden-import=PIL `
+            --hidden-import=tkinter `
+            --hidden-import=counter `
+            --hidden-import=review_gui `
+            --hidden-import=inventory_ai `
+            --hidden-import=ui_utils `
+            --collect-all=tcl `
+            --collect-all=tk `
+            app.py
+
+      - name: Prepare Artifacts
+        run: |
+          Copy-Item ".env.example" -Destination "dist\.env"
+          Copy-Item "categories.csv" -Destination "dist\categories.csv"
+          if (Test-Path "dist\InventaireAI_v${{ steps.get_version.outputs.VERSION }}.exe") {
+             Write-Host "Build successful."
+          } else {
+             Write-Error "Executable not found!"
+          }
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: InventaireAI-Windows-${{ steps.get_version.outputs.VERSION }}
+          path: inventaireAI/dist/
