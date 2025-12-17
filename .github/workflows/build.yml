@@ -70,3 +70,14 @@ jobs:
         with:
           name: InventaireAI-Windows-${{ steps.get_version.outputs.VERSION }}
           path: inventaireAI/dist/
+
+      - name: Zip Artifacts for Release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          Compress-Archive -Path "dist\*" -DestinationPath "InventaireAI_v${{ steps.get_version.outputs.VERSION }}.zip"
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: inventaireAI/InventaireAI_v${{ steps.get_version.outputs.VERSION }}.zip
