@@ -327,8 +327,12 @@ def main():
              print(f"  Assigned new ID: {obj_id}")
 
         
+        # Helper for console status
+        def console_status(msg):
+            print(f"    [Status] {msg}")
+
         # Initial Analysis
-        result = analyze_image(original_path, categories_context=categories_context, folder_context=folder_context)
+        result = analyze_image(original_path, categories_context=categories_context, folder_context=folder_context, status_callback=console_status)
         
         # Reliability Check
         fiabilite = result.get("fiabilite", 0)
@@ -362,7 +366,7 @@ def main():
                     else:
                         # User provided a hint, re-analyze
                         print(f"  Re-analyzing with hint: '{user_input}'...")
-                        result = analyze_image(original_path, categories_context=categories_context, user_hint=user_input, folder_context=folder_context)
+                        result = analyze_image(original_path, categories_context=categories_context, user_hint=user_input, folder_context=folder_context, status_callback=console_status)
                         new_score = result.get("fiabilite", 0)
                         print(f"  New Result: {result.get('nom')} (Score: {new_score})")
                         # We assume the user accepts the new result (or we could loop again, but let's keep it simple for now: one retry)

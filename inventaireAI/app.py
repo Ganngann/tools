@@ -156,10 +156,10 @@ class LauncherApp:
             self.root.after(0, lambda: messagebox.showerror("Erreur", f"Une erreur est survenue:\n{e}"))
             self.root.after(0, self.popup.destroy)
 
-    def update_progress(self, current, total, filename):
+    def update_progress(self, current, total, message):
         progress = (current / total) * 100
         self.root.after(0, lambda: self.progress_var.set(progress))
-        self.root.after(0, lambda: self.lbl_status.config(text=f"Traitement de : {filename}"))
+        self.root.after(0, lambda: self.lbl_status.config(text=message))
 
     def finish_inventory(self, csv_path):
         self.popup.destroy()
