@@ -90,8 +90,20 @@ class ReviewApp:
             
             if "Fiabilite" in self.df.columns:
                 self.df["Fiabilite"] = pd.to_numeric(self.df["Fiabilite"], errors='coerce').fillna(0)
-                review_df = self.df[self.df["Fiabilite"] < 100].sort_values("Fiabilite", ascending=True)
-                self.review_queue = review_df.index.tolist()
+                # Filter items with reliability < 100
+                review_candidates = self.df[self.df["Fiabilite"] < 100]
+
+                # Determine which column holds the filename
+                file_col = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
+
+                # Group by filename and find the minimum reliability for each file
+                file_scores = review_candidates.groupby(file_col)["Fiabilite"].min().reset_index()
+
+                # Sort files by their worst (minimum) reliability score
+                file_scores = file_scores.sort_values("Fiabilite", ascending=True)
+
+                # The queue is now a list of unique filenames
+                self.review_queue = file_scores[file_col].tolist()
             else:
                 self.review_queue = []
                 
@@ -432,7 +444,80 @@ class ReviewApp:
         entry.pack(side="left", expand=True, fill="x")
         if readonly:
             entry.config(state="readonly")
+
+        # Auto-save on focus out
+        entry.bind("<FocusOut>", lambda e, n=name: self.on_field_focus_out(e, n))
+
         self.fields[name] = entry
+
+    def on_field_focus_out(self, event, field_name):
+        self.save_field_to_df(field_name)
+
+    def save_field_to_df(self, field_name):
+        if self.active_df_index is None: return
+
+        # Don't auto-save readonly fields
+        if field_name in ["ID", "Fichier", "Fichier Original", "Fiabilite"]: return
+
+        try:
+            val = self.fields[field_name].get()
+
+            # Type conversion logic similar to validate_item
+            if field_name == "Categorie":
+                 # Convert Name back to ID if possible
+                 for cid, cname in self.category_map.items():
+                    if cname == val:
+                        val = cid
+                        break
+
+            if field_name == "Quantite":
+                 try: val = int(val)
+                 except: pass
+            elif field_name in ["Prix Unitaire", "Prix Neuf Estime"]:
+                 try: val = float(val.replace(',', '.'))
+                 except: pass
+
+            self.df.at[self.active_df_index, field_name] = val
+
+            # Recalculate Total Price
+            try:
+                q = float(self.df.at[self.active_df_index, "Quantite"])
+                p = float(self.df.at[self.active_df_index, "Prix Unitaire"])
+                self.df.at[self.active_df_index, "Prix Total"] = q * p
+            except: pass
+
+            self.save_data()
+
+            # Update the sibling tree item specifically
+            self._update_sibling_tree_item(self.active_df_index)
+
+        except Exception as e:
+            print(f"Auto-save error: {e}")
+
+    def save_current_view(self):
+        """Force save all fields in the current view to the DF."""
+        if self.active_df_index is None: return
+        for field in self.fields:
+            self.save_field_to_df(field)
+
+    def _update_sibling_tree_item(self, idx):
+        # Helper to update just the current line in treeview without full rebuild
+        try:
+             curr_id = self.df.at[idx, "ID"]
+             # Find item in tree
+             for item in self.sibling_tree.get_children():
+                 vals = self.sibling_tree.item(item, 'values')
+                 if str(vals[0]) == str(curr_id):
+                     new_vals = (
+                        curr_id,
+                        self.df.at[idx, "Nom"],
+                        self.df.at[idx, "Quantite"],
+                        self.df.at[idx, "Etat"],
+                        self.df.at[idx, "Fiabilite"]
+                     )
+                     self.sibling_tree.item(item, values=new_vals)
+                     break
+        except: pass
 
     def _get_reliability_color(self, val):
         try: score = float(val)
@@ -449,26 +534,47 @@ class ReviewApp:
             self.current_selection_coords = None
 
         self.current_rotation = 0
+        file_col = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
 
         # Determine Active Index Logic
         if self.active_df_index is None:
-            # Initialize from queue
+            # Initialize from queue (which is now filenames)
             if self.current_queue_index < len(self.review_queue):
-                self.active_df_index = self.review_queue[self.current_queue_index]
+                current_filename = self.review_queue[self.current_queue_index]
+
+                # Find all items for this file
+                siblings = self.df[self.df[file_col] == current_filename]
+
+                if not siblings.empty:
+                    # Pick the one with the lowest reliability to show first
+                    best_candidate = siblings.sort_values("Fiabilite", ascending=True).index[0]
+                    self.active_df_index = best_candidate
+                else:
+                    # Should not happen if queue is consistent
+                    messagebox.showerror("Erreur", f"Fichier dans la queue introuvable dans le CSV: {current_filename}")
+                    self.current_queue_index += 1
+                    self.show_current_item()
+                    return
             else:
                  messagebox.showinfo("Terminé", "Aucun autre élément à réviser !")
                  self.root.quit()
                  return
 
         idx = self.active_df_index
+        if idx not in self.df.index:
+             self.active_df_index = None
+             self.show_current_item()
+             return
+
         row = self.df.loc[idx]
+        current_filename = row.get(file_col, "")
         
         # Status Label Logic
         queue_pos = "?"
-        if idx in self.review_queue:
-            queue_pos = str(self.review_queue.index(idx) + 1)
+        if current_filename in self.review_queue:
+            queue_pos = str(self.review_queue.index(current_filename) + 1)
 
-        self.lbl_status.config(text=f"Objet ID: {row.get('ID', '?')} (Queue: {queue_pos} / {len(self.review_queue)})")
+        self.lbl_status.config(text=f"Objet ID: {row.get('ID', '?')} (Image: {queue_pos} / {len(self.review_queue)})")
         
         for field, entry in self.fields.items():
             val = row.get(field, "")
@@ -664,9 +770,56 @@ class ReviewApp:
     def rotate_image(self):
         if self.current_image_path and os.path.exists(self.current_image_path):
             try:
+                # Rotate the physical image (PIL rotates CCW by default)
                 img = Image.open(self.current_image_path)
                 img = img.rotate(90, expand=True)
                 img.save(self.current_image_path)
+
+                # Rotate Bounding Boxes for ALL items on this image
+                file_col = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
+                filename = os.path.basename(self.current_image_path)
+
+                siblings = self.df[self.df[file_col] == filename]
+
+                for idx in siblings.index:
+                    if pd.notna(self.df.at[idx, "Box 2D"]):
+                        try:
+                            val = self.df.at[idx, "Box 2D"]
+                            if isinstance(val, str): b2d = ast.literal_eval(val)
+                            elif isinstance(val, list): b2d = val
+                            else: continue
+
+                            if len(b2d) == 4:
+                                ymin, xmin, ymax, xmax = b2d
+                                # Coordinate Transform for 90 deg CCW in normalized (0-1000) space
+                                # x' = y
+                                # y' = 1000 - x
+
+                                new_ymin = 1000 - xmax
+                                new_xmin = ymin
+                                new_ymax = 1000 - xmin
+                                new_xmax = ymax
+
+                                # Ensure min/max order
+                                final_ymin = min(new_ymin, new_ymax)
+                                final_ymax = max(new_ymin, new_ymax)
+                                final_xmin = min(new_xmin, new_xmax)
+                                final_xmax = max(new_xmin, new_xmax)
+
+                                self.df.at[idx, "Box 2D"] = str([final_ymin, final_xmin, final_ymax, final_xmax])
+                        except Exception as e:
+                            print(f"Failed to rotate box for idx {idx}: {e}")
+
+                # Update current view variables
+                if self.active_df_index is not None:
+                    raw_box = self.df.at[self.active_df_index, "Box 2D"]
+                    if isinstance(raw_box, str):
+                        try: self.current_box_2d = ast.literal_eval(raw_box)
+                        except: self.current_box_2d = None
+                    else:
+                        self.current_box_2d = raw_box
+
+                self.save_data()
                 self.display_image(self.current_image_path, self.current_box_2d)
             except Exception as e:
                 messagebox.showerror("Erreur", f"Impossible de pivoter l'image: {e}")
@@ -759,8 +912,14 @@ class ReviewApp:
         if should_delete:
             try:
                 self.df = self.df.drop(idx)
-                if idx in self.review_queue:
-                    self.review_queue.remove(idx)
+
+                # Check if file still has siblings
+                remaining = self.df[self.df[col_name] == filename]
+
+                if remaining.empty:
+                    # Remove filename from queue if no items left
+                    if filename in self.review_queue:
+                        self.review_queue.remove(filename)
                 
                 self.save_data()
 
@@ -768,20 +927,14 @@ class ReviewApp:
                 if is_last:
                     # No siblings left, go to next image (queue logic)
                     self.active_df_index = None
-                    # Fix queue index if it shifted
+                    # Fix queue index if it shifted (queue length reduced)
                     if self.current_queue_index >= len(self.review_queue):
                         self.current_queue_index = max(0, len(self.review_queue) - 1)
                     self.show_current_item()
                 else:
                     # Siblings exist, switch to one of them
-                    remaining = self.df[self.df[col_name] == filename]
                     if not remaining.empty:
                         self.active_df_index = remaining.index[0]
-                        # We stay on same image, so queue index doesn't change relative to 'files',
-                        # but we need to ensure we don't drift if the deleted item was the queue pointer.
-                        if self.active_df_index in self.review_queue:
-                            self.current_queue_index = self.review_queue.index(self.active_df_index)
-
                         self.show_current_item(reload_siblings=True)
                     else:
                         self.active_df_index = None
@@ -791,28 +944,12 @@ class ReviewApp:
                 messagebox.showerror("Erreur", f"Erreur lors de la suppression: {e}")
 
     def prev_item(self):
+        self.save_current_view()
         # Move backward to the PREVIOUS IMAGE in queue
         if self.current_queue_index > 0:
-            # Get current file
-            current_idx = self.review_queue[self.current_queue_index]
-            col_name = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
-            current_file = self.df.at[current_idx, col_name]
-
-            # Find prev index with DIFFERENT file
-            found_prev = False
-            for i in range(self.current_queue_index - 1, -1, -1):
-                idx = self.review_queue[i]
-                fname = self.df.at[idx, col_name]
-                if fname != current_file:
-                    self.current_queue_index = i
-                    found_prev = True
-                    break
-
-            if found_prev:
-                self.active_df_index = None
-                self.show_current_item()
-            else:
-                messagebox.showinfo("Info", "Vous êtes au début de la liste (ou pas d'autre image précédente).")
+            self.current_queue_index -= 1
+            self.active_df_index = None
+            self.show_current_item()
         else:
              messagebox.showinfo("Info", "Vous êtes au début de la liste.")
 
@@ -966,10 +1103,6 @@ class ReviewApp:
 
                     self.df = pd.concat([self.df, pd.DataFrame([new_row])], ignore_index=True)
 
-                current_queue_pos = self.current_queue_index
-                new_indices = list(range(len(self.df) - new_rows_count, len(self.df)))
-                self.review_queue[current_queue_pos+1:current_queue_pos+1] = new_indices
-                
                 self.save_data()
                 self._update_sibling_list(current_row_data.get("Fichier Original"), current_row_data.get("ID"))
 
@@ -1107,10 +1240,15 @@ class ReviewApp:
                         self.current_image_path = None
                      except Exception: pass
 
+            col_name = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
             if indices_to_drop:
                 self.df = self.df.drop(indices_to_drop)
-                self.review_queue = [i for i in self.review_queue if i not in indices_to_drop]
                 
+                # Update queue - remove filename if no items left
+                remaining = self.df[self.df[col_name] == filename]
+                if remaining.empty and filename in self.review_queue:
+                    self.review_queue.remove(filename)
+
                 self.active_df_index = None # Reset
 
                 if self.current_queue_index >= len(self.review_queue):
@@ -1125,27 +1263,12 @@ class ReviewApp:
             messagebox.showerror("Erreur", f"Erreur lors du marquage à refaire: {e}")
 
     def next_item(self):
+        self.save_current_view()
         # Move forward to the NEXT IMAGE in queue
-        if self.current_queue_index < len(self.review_queue):
-             current_idx = self.review_queue[self.current_queue_index]
-             col_name = "Fichier Original" if "Fichier Original" in self.df.columns else "Fichier"
-             current_file = self.df.at[current_idx, col_name]
-
-             # Find next index with DIFFERENT file
-             found_next = False
-             for i in range(self.current_queue_index + 1, len(self.review_queue)):
-                 idx = self.review_queue[i]
-                 fname = self.df.at[idx, col_name]
-                 if fname != current_file:
-                     self.current_queue_index = i
-                     found_next = True
-                     break
-
-             if found_next:
-                 self.active_df_index = None
-                 self.show_current_item()
-             else:
-                  messagebox.showinfo("Info", "Vous êtes au bout de la liste (pas d'autre image).")
+        if self.current_queue_index < len(self.review_queue) - 1:
+            self.current_queue_index += 1
+            self.active_df_index = None
+            self.show_current_item()
         else:
             messagebox.showinfo("Info", "Vous êtes au bout de la liste.")
 
