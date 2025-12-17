@@ -149,11 +149,12 @@ class LauncherApp:
     def run_process_inventory(self, folder_path):
         try:
             csv_path = process_inventory(folder_path, progress_callback=self.update_progress, stop_event=self.stop_event)
-            
+
             if not self.stop_event.is_set():
                 self.root.after(0, lambda: self.finish_inventory(csv_path))
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Erreur", f"Une erreur est survenue:\n{e}"))
+            err_msg = str(e)
+            self.root.after(0, lambda: messagebox.showerror("Erreur", f"Une erreur est survenue:\n{err_msg}"))
             self.root.after(0, self.popup.destroy)
 
     def update_progress(self, current, total, message):
