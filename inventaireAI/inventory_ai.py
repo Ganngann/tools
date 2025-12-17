@@ -112,6 +112,9 @@ def analyze_image(image_path, categories_context=None, user_hint=None, folder_co
             Identify the object and look for any handwritten or printed quantity on a paper next to it.
             Also look for any other text or notes written on the paper (e.g. size, condition, specific details).
             
+            PRIORITY RULE (QUANTITY): If a post-it note or paper with a number/quantity is visible next to the object, YOU MUST USE THAT NUMBER as the quantity. This overrides any visual count of items.
+            EXCLUSION RULE (OBJECTS): Do NOT list the post-it note, paper, or label itself as an object. It is only context. Exception: if the post-it note is the ONLY thing in the entire image, then you may list it as the object.
+            
             IMPORTANT: Pay special attention to the quantity. For a box of items (e.g., 900 screws), you have two valid choices:
             1. Unit logic: Quantity = 900, Name = 'Vis' (Screw)
             2. Box logic: Quantity = 1, Name = 'Boite de 900 vis' (Box of 900 screws)
@@ -276,6 +279,9 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             {hint_text}
             Look for any handwritten or printed quantity on a paper next to objects if present, otherwise count the visible items.
             Also look for any other text or notes written on the paper (e.g. size, condition, specific details).
+
+            PRIORITY RULE (QUANTITY): For each object, if a post-it note or label clearly associates a quantity with it, YOU MUST USE THAT QUANTITY.
+            EXCLUSION RULE (OBJECTS): Do NOT count the post-it notes, papers, or labels as separate objects. They are context/labels only.
 
             IMPORTANT: Pay special attention to the quantity. For a box of items (e.g., 900 screws), you have two valid choices:
             1. Unit logic: Quantity = 900, Name = 'Vis' (Screw)

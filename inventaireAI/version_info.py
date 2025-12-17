@@ -1,8 +1,8 @@
 # Version Information
 # This file is automatically updated by build_exe.bat during build.
 
-VERSION = "1.2.4"
-BUILD_DATE = "2025-12-16"
+VERSION = "1.2.7"
+BUILD_DATE = "2025-12-17"
 
 # URL to check for updates (Raw content of a version.json or similar)
 # JSON format expected: {"version": "1.3.0", "url": "..."}
