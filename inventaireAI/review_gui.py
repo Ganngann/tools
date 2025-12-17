@@ -439,7 +439,7 @@ class ReviewApp:
         if name == "Categorie":
             self.category_map = self.load_category_list()
             display_values = sorted(list(self.category_map.values()))
-            entry = ttk.Combobox(row, values=display_values, font=("Arial", 10))
+            entry = ttk.Combobox(row, values=display_values, font=("Arial", 10), state="readonly")
         elif name == "Etat":
             entry = ttk.Combobox(row, values=["Neuf", "Occasion", "Inconnu"], font=("Arial", 10))
         else:
@@ -586,12 +586,13 @@ class ReviewApp:
             entry.config(state="normal")
             entry.delete(0, tk.END)
             if field == "Categorie":
-                cat_id = str(val).strip()
-                cat_name = self.category_map.get(cat_id, cat_id)
-                entry.insert(0, cat_name)
+                raw_val = str(val).strip()
+                # Display Name if it's a known ID, otherwise keep existing value (Name or Custom)
+                display_val = self.category_map.get(raw_val, raw_val)
+                entry.set(display_val)
             else:
                 entry.insert(0, str(val))
-            if field in ["ID", "Fichier", "Fichier Original", "Fiabilite"]:
+            if field in ["ID", "Fichier", "Fichier Original", "Fiabilite", "Categorie"]:
                 entry.config(state="readonly")
             if field == "Fiabilite":
                 color = self._get_reliability_color(val)
@@ -864,6 +865,7 @@ class ReviewApp:
         try:
             self.df.at[idx, "Nom"] = self.get_field_value("Nom")
             cat_name = self.get_field_value("Categorie")
+            # Convert Name -> ID if possible, else preserve value
             cat_id = cat_name
             for cid, cname in self.category_map.items():
                 if cname == cat_name:
@@ -1152,8 +1154,14 @@ class ReviewApp:
                 entry = self.fields.get(ui_field)
                 if entry:
                     entry.config(state="normal")
-                    entry.delete(0, tk.END)
-                    entry.insert(0, str(val))
+                    if isinstance(entry, ttk.Combobox):
+                        entry.set(str(val))
+                    else:
+                        entry.delete(0, tk.END)
+                        entry.insert(0, str(val))
+
+                    if ui_field == "Categorie":
+                        entry.config(state="readonly")
                 
         if "box_2d" in result and result["box_2d"]:
             idx = self.active_df_index
