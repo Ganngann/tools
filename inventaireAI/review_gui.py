@@ -451,6 +451,9 @@ class ReviewApp:
         self.fields[name] = entry
 
     def on_field_focus_out(self, event, field_name):
+        self.save_field_to_df(field_name)
+
+    def save_field_to_df(self, field_name):
         if self.active_df_index is None: return
 
         # Don't auto-save readonly fields
@@ -490,6 +493,12 @@ class ReviewApp:
 
         except Exception as e:
             print(f"Auto-save error: {e}")
+
+    def save_current_view(self):
+        """Force save all fields in the current view to the DF."""
+        if self.active_df_index is None: return
+        for field in self.fields:
+            self.save_field_to_df(field)
 
     def _update_sibling_tree_item(self, idx):
         # Helper to update just the current line in treeview without full rebuild
@@ -935,6 +944,7 @@ class ReviewApp:
                 messagebox.showerror("Erreur", f"Erreur lors de la suppression: {e}")
 
     def prev_item(self):
+        self.save_current_view()
         # Move backward to the PREVIOUS IMAGE in queue
         if self.current_queue_index > 0:
             self.current_queue_index -= 1
@@ -1253,6 +1263,7 @@ class ReviewApp:
             messagebox.showerror("Erreur", f"Erreur lors du marquage à refaire: {e}")
 
     def next_item(self):
+        self.save_current_view()
         # Move forward to the NEXT IMAGE in queue
         if self.current_queue_index < len(self.review_queue) - 1:
             self.current_queue_index += 1
