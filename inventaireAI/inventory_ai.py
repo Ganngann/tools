@@ -137,6 +137,7 @@ def analyze_image(image_path, categories_context=None, user_hint=None, folder_co
             - "prix_unitaire_estime": An estimated unit price in Euros. IMPORTANT: Always use the PRICE AS NEW (replacement value), even if the object is used/broken. Support decimals for small items (e.g. 0.05).
             - "prix_neuf_estime": Same as above. Return as a number (decimals allowed).
             - "fiabilite": A confidence score (0-100) indicating how reliable this identification and detail extraction is. Return as an integer.
+            - "rotation_suggeree": Indicates if the image should be rotated to be upright. Values allowed: 0, 90, 180, 270 (degrees clockwise).
             - "box_2d": The bounding box of the object in the image. Return as a list of 4 integers [ymin, xmin, ymax, xmax] normalized to 1000 (0-1000).
             
             Example output format:
@@ -149,6 +150,7 @@ def analyze_image(image_path, categories_context=None, user_hint=None, folder_co
                 "prix_unitaire_estime": 2,
                 "prix_neuf_estime": 5,
                 "fiabilite": 95,
+                "rotation_suggeree": 0,
                 "box_2d": [100, 200, 500, 600]
             }}
             """
@@ -309,6 +311,7 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             - "prix_unitaire_estime": An estimated unit price in Euros. IMPORTANT: Always use the PRICE AS NEW (replacement value). Return as a number (decimals allowed e.g. 0.05).
             - "prix_neuf_estime": Same as above. Return as a number (decimals allowed).
             - "fiabilite": A confidence score (0-100) indicating how reliable this identification and detail extraction is for this specific object. Return as an integer.
+            - "rotation_suggeree": Indicates if the global image should be rotated to be upright. Values allowed: 0, 90, 180, 270 (degrees clockwise).
             - "box_2d": The bounding box of the object in the image. Return as a list of 4 integers [ymin, xmin, ymax, xmax] normalized to 1000 (0-1000).
 
             Example output format:
@@ -322,6 +325,7 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
                     "prix_unitaire_estime": 5,
                     "prix_neuf_estime": 15,
                     "fiabilite": 90,
+                    "rotation_suggeree": 0,
                     "box_2d": [150, 250, 450, 550]
                 }},
                 {{
@@ -333,6 +337,7 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
                     "prix_unitaire_estime": 2,
                     "prix_neuf_estime": 5,
                     "fiabilite": 85,
+                    "rotation_suggeree": 0,
                     "box_2d": [600, 100, 800, 300]
                 }}
             ]

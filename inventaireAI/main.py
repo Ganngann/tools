@@ -334,6 +334,62 @@ def main():
         # Initial Analysis
         result = analyze_image(original_path, categories_context=categories_context, folder_context=folder_context, status_callback=console_status)
         
+        # Check for Rotation Suggestion
+        rotation_suggeree = result.get("rotation_suggeree", 0)
+        try:
+             rotation_suggeree = int(rotation_suggeree)
+        except:
+             rotation_suggeree = 0
+
+        if rotation_suggeree in [90, 180, 270]:
+            print(f"  Auto-Rotating image by {rotation_suggeree} degrees CW...")
+            try:
+                # Rotate original image in place (or just memory? No, we process the file later)
+                # It is safer to rotate the file on disk so the user sees it correct later.
+                img_rot = Image.open(original_path)
+                # PIL rotate is CCW, so 90 CW = -90 CCW = 270 CCW
+                # But 'rotation_suggeree' 90 usually means "It is rotated 90 deg clockwise".
+                # If the image IS rotated 90 deg clockwise, we need to rotate it 90 deg CCW to fix it?
+                # Or does it mean "Please rotate it 90 degrees clockwise"?
+                # Prompt said: "Indicates if the image should be rotated to be upright."
+                # So if it returns 90, it means "Rotate 90 deg Clockwise to fix".
+                # PIL rotate takes degrees Counter Clockwise.
+                # So to rotate 90 CW, we pass -90 (or 270).
+
+                angle = -rotation_suggeree
+                img_rot = img_rot.rotate(angle, expand=True)
+                img_rot.save(original_path)
+
+                # We also need to rotate the 'box_2d' returned by AI, because AI saw the unrotated image.
+                # Coordinate space 0-1000.
+                if "box_2d" in result and result["box_2d"]:
+                    box = result["box_2d"]
+                    ymin, xmin, ymax, xmax = box
+
+                    if rotation_suggeree == 90:
+                        # 90 CW
+                        # x' = 1000 - y
+                        # y' = x
+                        ny_min = xmin
+                        nx_min = 1000 - ymax
+                        ny_max = xmax
+                        nx_max = 1000 - ymin
+                        result["box_2d"] = [min(ny_min, ny_max), min(nx_min, nx_max), max(ny_min, ny_max), max(nx_min, nx_max)]
+                    elif rotation_suggeree == 180:
+                         result["box_2d"] = [1000 - ymax, 1000 - xmax, 1000 - ymin, 1000 - xmin]
+                    elif rotation_suggeree == 270:
+                        # 270 CW (90 CCW)
+                        # x' = y
+                        # y' = 1000 - x
+                        ny_min = 1000 - xmax
+                        nx_min = ymin
+                        ny_max = 1000 - xmin
+                        nx_max = ymax
+                        result["box_2d"] = [min(ny_min, ny_max), min(nx_min, nx_max), max(ny_min, ny_max), max(nx_min, nx_max)]
+
+            except Exception as e:
+                print(f"  Error rotating image: {e}")
+
         # Reliability Check
         fiabilite = result.get("fiabilite", 0)
         try:
