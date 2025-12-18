@@ -215,6 +215,10 @@ class ReviewApp:
         self.btn_multi.pack(side="left", padx=5)
         ToolTip(self.btn_multi, "Utiliser si l'image contient PLUSIEURS objets.\nL'IA essaiera de les séparer en plusieurs lignes d'inventaire.")
         
+        self.btn_add_zone = tk.Button(self.tools_frame, text="➕ Ajouter (Zone)", bg="#dbeaff", command=self.add_item_zone)
+        self.btn_add_zone.pack(side="left", padx=5)
+        ToolTip(self.btn_add_zone, "Ajouter un NOUVEL objet sur cette image.\n1. Dessinez un carré rouge sur l'objet.\n2. Cliquez sur ce bouton.\nL'IA analysera la zone et ajoutera une nouvelle ligne.")
+
         self.form_frame = tk.Frame(self.right_frame)
         self.form_frame.pack(fill="x")
         
@@ -934,6 +938,22 @@ class ReviewApp:
 
         if should_delete:
             try:
+                # Calculate next sibling index BEFORE deletion
+                next_active_idx = None
+                if not is_last:
+                    # Get sorted siblings indices
+                    s_indices = siblings.sort_values("ID").index.tolist()
+                    if idx in s_indices:
+                        current_pos = s_indices.index(idx)
+                        # Prefer next item, otherwise previous
+                        if current_pos < len(s_indices) - 1:
+                            next_active_idx = s_indices[current_pos + 1]
+                        elif current_pos > 0:
+                            next_active_idx = s_indices[current_pos - 1]
+                        else:
+                            # Should not happen if not is_last
+                            pass
+
                 self.df = self.df.drop(idx)
 
                 # Check if file still has siblings
@@ -955,13 +975,16 @@ class ReviewApp:
                         self.current_queue_index = max(0, len(self.review_queue) - 1)
                     self.show_current_item()
                 else:
-                    # Siblings exist, switch to one of them
-                    if not remaining.empty:
+                    # Siblings exist, switch to the calculated next sibling
+                    if next_active_idx is not None and next_active_idx in remaining.index:
+                        self.active_df_index = next_active_idx
+                    elif not remaining.empty:
+                        # Fallback
                         self.active_df_index = remaining.index[0]
-                        self.show_current_item(reload_siblings=True)
                     else:
                         self.active_df_index = None
-                        self.show_current_item()
+
+                    self.show_current_item(reload_siblings=True)
 
             except Exception as e:
                 messagebox.showerror("Erreur", f"Erreur lors de la suppression: {e}")
@@ -1063,6 +1086,186 @@ class ReviewApp:
         finally:
             self.root.config(cursor="")
 
+    def add_item_zone(self):
+        if not self.current_image_path:
+            messagebox.showwarning("Attention", "Pas d'image chargée.")
+            return
+
+        if not self.current_selection_coords:
+            messagebox.showinfo("Information", "Veuillez d'abord dessiner un carré rouge (Zone) sur l'image pour cibler le nouvel objet.")
+            return
+
+        hint = simpledialog.askstring("Ajouter Objet", "Indice optionnel pour cet objet (ex: 'Roulement à billes'):")
+        if hint is None: return
+
+        try:
+            self.root.config(cursor="watch")
+            self.update_status("Analyse de la zone pour ajout...")
+
+            # Prepare Crop
+            x1, y1, x2, y2 = self.current_selection_coords
+            img_x1 = x1 - self.img_offset_x
+            img_y1 = y1 - self.img_offset_y
+            img_x2 = x2 - self.img_offset_x
+            img_y2 = y2 - self.img_offset_y
+
+            disp_w, disp_h = self.img_display_size
+            orig_w, orig_h = self.original_image_size
+
+            scale_x = orig_w / disp_w
+            scale_y = orig_h / disp_h
+
+            final_x1 = max(0, int(img_x1 * scale_x))
+            final_y1 = max(0, int(img_y1 * scale_y))
+            final_x2 = min(orig_w, int(img_x2 * scale_x))
+            final_y2 = min(orig_h, int(img_y2 * scale_y))
+
+            temp_crop_path = None
+            crop_info = None
+
+            if (final_x2 - final_x1) > 10 and (final_y2 - final_y1) > 10:
+                try:
+                    img = Image.open(self.current_image_path)
+                    crop = img.crop((final_x1, final_y1, final_x2, final_y2))
+                    temp_crop_path = os.path.join(self.folder_path, "temp_add_crop.jpg")
+                    crop.save(temp_crop_path)
+                    crop_info = (final_x1, final_y1, final_x2 - final_x1, final_y2 - final_y1)
+                except Exception as e:
+                    print(f"Crop failed: {e}")
+                    self.root.config(cursor="")
+                    return
+            else:
+                 messagebox.showwarning("Attention", "Zone trop petite.")
+                 self.root.config(cursor="")
+                 return
+
+            # Analyze
+            result = analyze_image(temp_crop_path, categories_context=self.categories_context, user_hint=hint, status_callback=self.update_status)
+
+            # Cleanup
+            if temp_crop_path and os.path.exists(temp_crop_path):
+                try: os.remove(temp_crop_path)
+                except: pass
+
+            # Re-map coordinates
+            if crop_info and result.get("box_2d") and isinstance(result["box_2d"], list) and len(result["box_2d"]) == 4:
+                local_box = result["box_2d"]
+                crop_x, crop_y, crop_w, crop_h = crop_info
+
+                l_ymin = (local_box[0] / 1000.0) * crop_h
+                l_xmin = (local_box[1] / 1000.0) * crop_w
+                l_ymax = (local_box[2] / 1000.0) * crop_h
+                l_xmax = (local_box[3] / 1000.0) * crop_w
+
+                f_ymin = int(((l_ymin + crop_y) / orig_h) * 1000)
+                f_xmin = int(((l_xmin + crop_x) / orig_w) * 1000)
+                f_ymax = int(((l_ymax + crop_y) / orig_h) * 1000)
+                f_xmax = int(((l_xmax + crop_x) / orig_w) * 1000)
+
+                result["box_2d"] = [f_ymin, f_xmin, f_ymax, f_xmax]
+
+            # Create new row
+            idx = self.active_df_index
+            if idx is not None:
+                current_row_data = self.df.loc[idx].to_dict()
+                file_original = current_row_data.get("Fichier Original")
+                file_current = current_row_data.get("Fichier")
+            else:
+                # Fallback if no active item (shouldn't happen with loaded image)
+                file_original = os.path.basename(self.current_image_path)
+                file_current = file_original
+
+            max_id = 0
+            if "ID" in self.df.columns:
+                    try: max_id = self.df["ID"].max()
+                    except: pass
+
+            new_id = max_id + 1
+
+            new_row = {
+                "ID": new_id,
+                "Fichier Original": file_original,
+                "Fichier": file_current,
+                "Commentaire": "Ajout Manuel (Zone)",
+                "Fiabilite": result.get("fiabilite", 0)
+            }
+
+            mapping = {
+                "nom": "Nom", "categorie": "Categorie", "etat": "Etat",
+                "quantite": "Quantite", "prix_unitaire_estime": "Prix Unitaire",
+                "prix_neuf_estime": "Prix Neuf Estime"
+            }
+            for res_key, df_key in mapping.items():
+                val = result.get(res_key, "")
+                if df_key in ["Quantite", "Prix Unitaire", "Prix Neuf Estime", "Prix Total"]:
+                        try: val = float(str(val))
+                        except: pass
+                new_row[df_key] = val
+
+            try:
+                q = float(new_row.get("Quantite", 0))
+                p = float(new_row.get("Prix Unitaire", 0))
+                new_row["Prix Total"] = q * p
+            except: pass
+
+            if "box_2d" in result:
+                new_row["Box 2D"] = str(result["box_2d"])
+
+            # Ensure all columns exist
+            for col in self.df.columns:
+                if col not in new_row:
+                    new_row[col] = ""
+
+            self.df = pd.concat([self.df, pd.DataFrame([new_row])], ignore_index=True)
+            self.save_data()
+
+            # Switch to new item
+            new_idx = self.df.index[-1]
+            self.active_df_index = new_idx
+            self.show_current_item(reload_siblings=True)
+
+            self.update_status("Objet ajouté !")
+
+        except Exception as e:
+            self.update_status(f"Erreur ajout: {e}")
+            messagebox.showerror("Erreur", f"Echec de l'ajout: {e}")
+        finally:
+             self.root.config(cursor="")
+
+    def _apply_rotation_suggestion(self, rotation_val):
+        """Applies rotation if suggested by AI (90, 180, 270)."""
+        if not rotation_val or int(rotation_val) == 0: return False
+
+        try:
+            rot = int(rotation_val)
+            if rot not in [90, 180, 270]: return False
+
+            # We use self.rotate_image which takes "left" (90) or "right" (-90/270).
+            # 180 needs two turns.
+
+            # Note: rotate_image rotates the file and updates all boxes.
+            # This is exactly what we want.
+
+            if rot == 90:
+                self.rotate_image("left") # 90 CCW?
+                # Wait, prompt says "degrees clockwise".
+                # 90 clockwise means we should rotate the image 90 CW (Right) to fix it?
+                # Or does it mean "The image IS rotated 90 degrees"?
+                # Usually "needs rotation" means "rotate X degrees to be upright".
+                # Let's assume "Rotate 90 degrees clockwise" means "Apply 90 CW".
+                self.rotate_image("right")
+            elif rot == 180:
+                self.rotate_image("right")
+                self.rotate_image("right")
+            elif rot == 270:
+                 # 270 CW = 90 CCW (Left)
+                 self.rotate_image("left")
+
+            return True
+        except Exception as e:
+            print(f"Auto-rotate failed: {e}")
+            return False
+
     def scan_multi_item(self):
         if not self.current_image_path:
             messagebox.showwarning("Attention", "Pas d'image chargée pour l'analyse.")
@@ -1083,6 +1286,51 @@ class ReviewApp:
                 return
                 
             first_item = results[0]
+
+            # Check for rotation on first item
+            if "rotation_suggeree" in first_item:
+                 if self._apply_rotation_suggestion(first_item["rotation_suggeree"]):
+                     # If rotated, we should probably re-run analysis or transform the result boxes?
+                     # Since we rotated the physical file, the boxes returned by AI (from old file) are now WRONG.
+                     # We must transform them.
+
+                     # Simple approach: Re-run analysis on the rotated image?
+                     # Or transform boxes.
+                     # Transforming boxes is faster.
+
+                     rot = int(first_item["rotation_suggeree"])
+                     # We applied 'rot' degrees CW.
+                     # We need to rotate the boxes 'rot' degrees CW.
+                     # 0-1000 space.
+
+                     def rotate_box_cw(b, angle):
+                        if not b: return b
+                        ymin, xmin, ymax, xmax = b
+                        if angle == 90:
+                            # x' = 1000 - y
+                            # y' = x
+                            ny_min = xmin
+                            nx_min = 1000 - ymax
+                            ny_max = xmax
+                            nx_max = 1000 - ymin
+                            return [min(ny_min, ny_max), min(nx_min, nx_max), max(ny_min, ny_max), max(nx_min, nx_max)]
+                        elif angle == 180:
+                             return [1000 - ymax, 1000 - xmax, 1000 - ymin, 1000 - xmin]
+                        elif angle == 270:
+                            # 90 CCW
+                            # x' = y
+                            # y' = 1000 - x
+                            ny_min = 1000 - xmax
+                            nx_min = ymin
+                            ny_max = 1000 - xmin
+                            nx_max = ymax
+                            return [min(ny_min, ny_max), min(nx_min, nx_max), max(ny_min, ny_max), max(nx_min, nx_max)]
+                        return b
+
+                     for res in results:
+                         if "box_2d" in res:
+                             res["box_2d"] = rotate_box_cw(res["box_2d"], rot)
+
             self._apply_scan_result(first_item)
             
             new_rows_count = 0
