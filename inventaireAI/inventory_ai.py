@@ -109,10 +109,13 @@ def analyze_image(image_path, categories_context=None, user_hint=None, folder_co
             {context_text}
             {previous_info_text}
             {hint_text}
-            Identify the object and look for any handwritten or printed quantity on a paper next to it.
+            Identify the object and look for any handwritten or printed quantity on a post-it note or paper placed ON or NEXT TO the object.
             Also look for any other text or notes written on the paper (e.g. size, condition, specific details).
             
-            PRIORITY RULE (QUANTITY): If a post-it note or paper with a number/quantity is visible next to the object, YOU MUST USE THAT NUMBER as the quantity. This overrides any visual count of items.
+            PRIORITY RULE (QUANTITY): If a post-it note (often yellow/neon/white) or paper with a handwritten number/quantity is visible ON or NEXT TO the object, YOU MUST USE THAT NUMBER as the quantity.
+            - Even if the visual count differs, TRUST THE WRITTEN NOTE.
+            - The note overrides any other quantity indication.
+
             EXCLUSION RULE (OBJECTS): Do NOT list the post-it note, paper, or label itself as an object. It is only context. Exception: if the post-it note is the ONLY thing in the entire image, then you may list it as the object.
             TRUNCATION RULE: Ignore objects that are significantly cut off by the edge of the image. Only list objects that are fully or mostly visible. Do not infer an object if only a small part (like a wheel or a shoe) is visible at the border.
             
@@ -278,10 +281,13 @@ def analyze_image_multiple(image_path, target_element=None, categories_context=N
             Analyze this image for an inventory system.
             {focus_instruction}
             {hint_text}
-            Look for any handwritten or printed quantity on a paper next to objects if present, otherwise count the visible items.
+            Look for any handwritten or printed quantity on a post-it note or paper placed ON or NEXT TO objects.
             Also look for any other text or notes written on the paper (e.g. size, condition, specific details).
 
-            PRIORITY RULE (QUANTITY): For each object, if a post-it note or label clearly associates a quantity with it, YOU MUST USE THAT QUANTITY.
+            PRIORITY RULE (QUANTITY): For each object, if a post-it note (often yellow/neon) or paper with a handwritten number/quantity is associated with it (placed ON it or NEXT TO it), YOU MUST USE THAT QUANTITY.
+            - Even if the visual count differs, TRUST THE WRITTEN NOTE.
+            - The note overrides any other quantity indication.
+
             EXCLUSION RULE (OBJECTS): Do NOT count the post-it notes, papers, or labels as separate objects. They are context/labels only.
             TRUNCATION RULE: Ignore objects that are significantly cut off by the edge of the image. Only list objects that are fully or mostly visible. Do not infer an object if only a small part (like a wheel or a shoe) is visible at the border.
 
