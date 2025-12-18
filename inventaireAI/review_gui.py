@@ -1,4 +1,5 @@
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from PIL import Image, ImageTk, ImageDraw
@@ -418,7 +419,10 @@ class ReviewApp:
         try:
             csv_path = os.path.join(self.folder_path, "categories.csv")
             if not os.path.exists(csv_path):
-                 script_dir = os.path.dirname(os.path.abspath(__file__))
+                 if getattr(sys, 'frozen', False):
+                     script_dir = os.path.dirname(sys.executable)
+                 else:
+                     script_dir = os.path.dirname(os.path.abspath(__file__))
                  csv_path = os.path.join(script_dir, "categories.csv")
             
             if os.path.exists(csv_path):
