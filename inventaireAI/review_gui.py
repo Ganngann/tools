@@ -1170,6 +1170,10 @@ class ReviewApp:
                 current_row_data = self.df.loc[idx].to_dict()
                 file_original = current_row_data.get("Fichier Original")
                 file_current = current_row_data.get("Fichier")
+
+                # Robust fallback if Fichier Original is missing (Legacy CSV)
+                if not file_original and file_current:
+                    file_original = file_current
             else:
                 # Fallback if no active item (shouldn't happen with loaded image)
                 file_original = os.path.basename(self.current_image_path)
