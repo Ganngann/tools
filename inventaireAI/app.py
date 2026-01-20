@@ -12,6 +12,7 @@ if getattr(sys, 'frozen', False):
 from counter import process_inventory
 from review_gui import ReviewApp
 from ui_utils import ToolTip
+from settings_gui import SettingsDialog
 
 from version_info import VERSION, BUILD_DATE
 from update_checker import check_for_updates_thread
@@ -85,6 +86,7 @@ class LauncherApp:
         # Grid layout for buttons for better centering
         btn_frame.columnconfigure(0, weight=1)
         btn_frame.columnconfigure(1, weight=1)
+        btn_frame.columnconfigure(2, weight=1) # Added for settings button if we want 3 columns, or keep 2 and put settings below
 
         self.btn_scan = ttk.Button(
             btn_frame, 
@@ -92,7 +94,7 @@ class LauncherApp:
             style="Big.TButton", 
             command=self.start_new_inventory
         )
-        self.btn_scan.grid(row=0, column=0, padx=10, sticky="ew")
+        self.btn_scan.grid(row=0, column=0, padx=5, sticky="ew")
         
         self.btn_review = ttk.Button(
             btn_frame, 
@@ -100,7 +102,20 @@ class LauncherApp:
             style="Big.TButton", 
             command=self.start_review
         )
-        self.btn_review.grid(row=0, column=1, padx=10, sticky="ew")
+        self.btn_review.grid(row=0, column=1, padx=5, sticky="ew")
+
+        # Settings Button (Row 1 or Column 2?)
+        # Let's put it in a separate row or smaller button
+
+        self.btn_settings = ttk.Button(
+            main_frame,
+            text="⚙️  Paramètres & Configuration",
+            command=self.open_settings
+        )
+        self.btn_settings.pack(pady=(15, 0), anchor="e") # Bottom right of main frame actions
+
+    def open_settings(self):
+        SettingsDialog(self.root)
 
     def on_update_result(self, result):
         has_update, new_ver, error = result

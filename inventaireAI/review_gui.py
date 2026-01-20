@@ -261,8 +261,29 @@ class ReviewApp:
         self.lbl_help = tk.Label(self.right_frame, text="Trié par fiabilité croissante (Pires en premier).", fg="#666", font=("Arial", 9), justify="center", bg="#f8f9fa", pady=5)
         self.lbl_help.pack(side="bottom", fill="x", pady=5)
 
+        # Help Button
+        btn_help = tk.Button(self.right_frame, text="❓ Aide Raccourcis", command=self.show_shortcuts_help, bg="#e2e6ea", font=("Arial", 8))
+        btn_help.place(relx=1.0, rely=0.0, anchor="ne", x=-10, y=10)
+
         self.root.bind('<Left>', lambda e: self.prev_item())
         self.root.bind('<Right>', lambda e: self.next_item())
+        self.root.bind('<Delete>', lambda e: self.delete_item())
+        self.root.bind('<Control-s>', lambda e: self.save_current_view())
+
+    def show_shortcuts_help(self):
+        msg = (
+            "RACCOURCIS CLAVIER DISPONIBLES :\n\n"
+            "⬅️ Flèche Gauche : Objet précédent\n"
+            "➡️ Flèche Droite : Objet suivant\n"
+            "❌ Suppr (Delete) : Supprimer l'objet courant\n"
+            "💾 Ctrl + S : Sauvegarder les modifications\n"
+            "\n"
+            "ASTUCES :\n"
+            "- Cliquez sur 'Valider (100%)' pour passer la fiabilité à 100% et avancer.\n"
+            "- Si une image contient plusieurs objets, utilisez 'Scan Multi'.\n"
+            "- Dessinez un carré rouge sur l'image pour rescanner une zone précise."
+        )
+        messagebox.showinfo("Aide Raccourcis", msg)
 
     # --- Mouse Selection Logic ---
     def on_mouse_down(self, event):
